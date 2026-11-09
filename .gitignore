@@ -1,0 +1,25 @@
+# Dependencies
+node_modules/
+
+# Secrets: never commit these
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+*.pfx
+
+# Database dumps and local data (may contain real student records)
+*.sql.gz
+*.dump
+*.sqlite
+*.db
+
+# Test coverage output
+coverage/
+
+# Logs and OS files
+*.log
+.DS_Store
+Thumbs.db
