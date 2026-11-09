@@ -38,7 +38,7 @@ Validation errors (400) also list the fields to highlight:
 | 401 | Not signed in, or wrong email/password |
 | 403 | Signed in but not allowed (wrong role, disabled account) |
 | 404 | Not found |
-| 409 | Already exists (email or ID number) |
+| 409 | Conflict: already exists (email, ID number, plate number), or the record is in use |
 | 429 | Too many requests. Wait and try again |
 | 500 | Server error (details are only in the server log) |
 
@@ -104,6 +104,124 @@ Returns the signed-in user. → `200 { "user": { ...user } }`, or `401` if not s
   "createdAt": "2026-11-04T..."
 }
 ```
+
+---
+
+## Lists: paging, sorting and search
+
+Admin lists (`GET /users`, `GET /vehicles`) accept these query parameters:
+
+| Parameter | Default | Notes |
+|---|---|---|
+| `page` | `1` | Page number |
+| `limit` | `20` | Rows per page, at most `100` |
+| `sort` | `createdAt` | See each endpoint for allowed values |
+| `order` | `desc` | `asc` or `desc` |
+| `q` | none | Search text, up to 100 characters (letters, numbers, spaces, `@ . ' _ -`) |
+
+Every list response includes:
+```json
+"pagination": { "page": 1, "limit": 20, "total": 57, "totalPages": 3 }
+```
+Example: `fetch(`${api}/users?role=student&q=${encodeURIComponent(search)}&page=2`, { credentials: 'include' })`
+
+---
+
+## Users
+
+### `PATCH /users/me` 🔒 any signed-in user
+Edits your own name. Send one or both fields. Email, ID number, role and status can't be changed here.
+```json
+{ "firstName": "Juan", "lastName": "Dela Cruz" }
+```
+→ `200 { "user": { ...user } }`
+
+### `GET /users` 🔒 admin
+User records. Filters: `role` (`student`, `faculty`, `admin`), `status` (`active`, `disabled`), `q` (name, email or ID number).
+Sort: `createdAt`, `lastName`, `firstName`, `email`, `schoolId`.
+```
+GET /users?role=faculty&status=active&q=mendoza&sort=lastName&order=asc
+```
+→ `200`
+```json
+{
+  "users": [
+    { "id": "…", "role": "faculty", "status": "active", "firstName": "Carla", "lastName": "Mendoza",
+      "email": "cmendoza@adnu.edu.ph", "schoolId": "EMP-0100", "createdAt": "…", "vehicleCount": 2 }
+  ],
+  "pagination": { "page": 1, "limit": 20, "total": 1, "totalPages": 1 }
+}
+```
+
+### `GET /users/:id` 🔒 admin
+One user with their vehicles. → `200 { "user": { ...user }, "vehicles": [ ...vehicle ] }`, or `404`.
+
+### `PATCH /users/:id/status` 🔒 admin
+Enables or disables a student or faculty account. A disabled user is signed out on their next request
+and can't sign in again until re-enabled.
+```json
+{ "status": "disabled" }
+```
+→ `200 { "user": { ...user } }`
+→ `400` for your own account, `403` for another admin account, `404` if the user doesn't exist.
+
+---
+
+## Vehicles
+
+### `POST /vehicles` 🔒 student, faculty
+Registers a vehicle to the signed-in user (the owner always comes from the session).
+```json
+{ "plateNumber": "ABC 1234", "type": "car", "make": "Toyota", "model": "Vios", "color": "White" }
+```
+- `type`: `car`, `motorcycle`, `tricycle`, `van` or `other`.
+- `make`, `model`, `color` are optional.
+- The plate is saved in capitals with single spaces (`abc  1234` → `ABC 1234`). 3–15 letters, numbers, spaces or hyphens.
+- Up to 5 vehicles per user.
+
+→ `201 { "vehicle": { ...vehicle } }`
+→ `409` if the plate is already registered, or the user already has 5 vehicles.
+
+### `GET /vehicles/mine` 🔒 student, faculty
+Your own vehicles, newest first. → `200 { "vehicles": [ ...vehicle ] }`
+
+### `GET /vehicles` 🔒 admin
+All vehicles, with owner details. Filters: `type`, `ownerRole` (`student`, `faculty`), `ownerId`,
+`q` (plate, make, model, color, owner name or ID number). Sort: `createdAt`, `plateNumber`, `type`, `make`.
+→ `200 { "vehicles": [ ...vehicle with owner ], "pagination": { … } }`
+
+### `GET /vehicles/:id` 🔒 owner or admin
+→ `200 { "vehicle": { ...vehicle } }`. Admins also get `owner`.
+→ `404` if it doesn't exist **or belongs to someone else** (so vehicle IDs can't be guessed).
+
+### `PATCH /vehicles/:id` 🔒 owner or admin
+Send only the fields that change. `null` or `""` clears `make`, `model` or `color`.
+```json
+{ "color": "Pearl White" }
+```
+→ `200 { "vehicle": { ...vehicle } }`
+→ `409` if the new plate is taken, or the vehicle already has a sticker application (its plate is then locked).
+
+### `DELETE /vehicles/:id` 🔒 owner or admin
+→ `204`. → `409` if the vehicle has sticker or parking records (they're kept for the records).
+
+### The `vehicle` object
+```json
+{
+  "id": "9b06…uuid",
+  "ownerId": "4cc0…uuid",
+  "plateNumber": "ABC 1234",
+  "type": "car",
+  "make": "Toyota",
+  "model": "Vios",
+  "color": "White",
+  "createdAt": "2026-11-09T…",
+  "updatedAt": "2026-11-09T…",
+  "owner": { "id": "…", "firstName": "Ana", "lastName": "Reyes", "fullName": "Ana Reyes",
+             "schoolId": "2023-00001", "email": "ana@gbox.adnu.edu.ph", "role": "student" }
+}
+```
+`owner` is only included in admin views.
 
 ---
 
