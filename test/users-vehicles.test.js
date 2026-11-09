@@ -137,6 +137,32 @@ test('a user can register at most 5 vehicles', async () => {
   assert.equal(sixth.status, 409);
 });
 
+test('the 5-vehicle limit holds when many requests arrive at the same moment', async () => {
+  // Calls the service directly: over HTTP the requests arrive slightly apart and can
+  // hide the race. Here up to 10 database connections really run at once.
+  const { users } = await import('../src/db/index.js');
+  const { registerVehicle } = await import('../src/services/vehicles.service.js');
+
+  for (let round = 0; round < 5; round += 1) {
+    const racer = await users.create({
+      role: 'student', firstName: 'Rae', lastName: 'Cer', email: `racer${round}@gbox.adnu.edu.ph`,
+      schoolId: `RACE-${round}`, passwordHash: 'not-used',
+    });
+    const results = await Promise.allSettled(Array.from({ length: 20 }, (_, i) => registerVehicle(racer, {
+      plateNumber: `R${round} ${100 + i}`, type: 'car',
+    })));
+    const statuses = results.map((r) => (r.status === 'fulfilled' ? 201 : r.reason.status));
+    const saved = (await pool.query('SELECT count(*)::int AS c FROM vehicles WHERE owner_id = $1', [racer.id])).rows[0].c;
+
+    // Remove the racer so the counts in later tests stay the same.
+    await pool.query('DELETE FROM vehicles WHERE owner_id = $1', [racer.id]);
+    await pool.query('DELETE FROM users WHERE id = $1', [racer.id]);
+
+    assert.equal(saved, 5, `round ${round}: ${saved} vehicles saved`);
+    assert.ok(statuses.every((s) => s === 201 || s === 409), `round ${round}: unexpected ${statuses.join(',')}`);
+  }
+});
+
 test('GET /vehicles/mine lists only your own vehicles', async () => {
   const res = await call('GET', '/vehicles/mine', { cookie: session.ana });
   assert.equal(res.status, 200);

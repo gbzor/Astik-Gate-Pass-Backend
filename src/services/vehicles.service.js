@@ -84,24 +84,40 @@ async function findAccessible(actor, id) {
 // POST /api/vehicles: the signed-in student or faculty member registers their own vehicle.
 // The owner always comes from the session, never from the request body.
 export async function registerVehicle(owner, data) {
+  const client = await pool.connect();
+  let id;
   try {
-    // One statement: the insert only happens if the owner is still under the limit.
-    const { rows } = await pool.query(
-      `INSERT INTO vehicles (owner_id, plate_number, type, make, model, color)
-       SELECT $1::uuid, $2::varchar, $3::varchar, $4::varchar, $5::varchar, $6::varchar
-        WHERE (SELECT count(*) FROM vehicles WHERE owner_id = $1::uuid) < $7::int
-       RETURNING id`,
-      [owner.id, data.plateNumber, data.type, data.make ?? null, data.model ?? null, data.color ?? null,
-        MAX_VEHICLES_PER_USER],
+    await client.query('BEGIN');
+    // Lock this owner's users row until COMMIT. Without it, several requests sent at the
+    // same moment could each count "4 vehicles" and all insert, going over the limit.
+    // Only requests for the SAME owner wait; other users aren't slowed down.
+    const locked = await client.query('SELECT 1 FROM users WHERE id = $1 FOR UPDATE', [owner.id]);
+    if (locked.rows.length === 0) throw new HttpError(401, 'Please sign in.');
+
+    const { rows: [{ total }] } = await client.query(
+      'SELECT count(*)::int AS total FROM vehicles WHERE owner_id = $1',
+      [owner.id],
     );
-    if (rows.length === 0) {
+    if (total >= MAX_VEHICLES_PER_USER) {
       throw new HttpError(409, `You can register up to ${MAX_VEHICLES_PER_USER} vehicles.`);
     }
-    return toVehicle(await findAccessible(owner, rows[0].id));
+
+    const { rows } = await client.query(
+      `INSERT INTO vehicles (owner_id, plate_number, type, make, model, color)
+       VALUES ($1, $2, $3, $4, $5, $6)
+       RETURNING id`,
+      [owner.id, data.plateNumber, data.type, data.make ?? null, data.model ?? null, data.color ?? null],
+    );
+    await client.query('COMMIT');
+    id = rows[0].id;
   } catch (err) {
+    await client.query('ROLLBACK');
     if (err.code === PG_UNIQUE_VIOLATION) throw new HttpError(409, DUPLICATE_PLATE);
     throw err;
+  } finally {
+    client.release();
   }
+  return toVehicle(await findAccessible(owner, id));
 }
 
 // GET /api/vehicles/mine
