@@ -85,7 +85,8 @@ Student and faculty login page. Admins are refused here.
 Admin login page. Same body and response as `/auth/login`. Only `admin` accounts are accepted.
 
 ### `POST /auth/logout`
-Clears the session cookie. → `204`
+Signs out: the session token stops working at once (even a copy of it), and the cookie is cleared.
+Other devices the user is signed in on stay signed in. → `204`
 
 ### `GET /auth/me` 🔒
 Returns the signed-in user. → `200 { "user": { ...user } }`, or `401` if not signed in.

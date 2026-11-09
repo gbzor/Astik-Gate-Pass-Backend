@@ -118,6 +118,8 @@ Layers: **routes → controllers → services → db**. Only `services/` may imp
 - Passwords hashed with bcrypt (cost 12). A wrong email and a wrong password take the same time and get the same message.
 - Session JWT in an `HttpOnly`, `SameSite=Strict` cookie (`Secure` in production). Every request rechecks that
   the account still exists and is active, so disabling an account signs the user out at once.
+- Logout cancels that token on the server, so a copied token stops working. The list of signed-out tokens is
+  kept in memory (free, no database change), so a server restart forgets it until those tokens expire (8h max).
 - Separate student/faculty and admin login pages. Sign-up can never create an admin.
 - Role-based access on every route. Asking for another user's vehicle returns `404`, so record IDs can't be probed.
 - Zod validates every input and drops unknown fields, so users can't set fields like `role` or `ownerId`.

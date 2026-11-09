@@ -102,6 +102,31 @@ test('register, sign in, see profile, sign out', async () => {
   assert.equal(out.status, 204);
 });
 
+test('logout stops a copied token from working, but not the user\'s other sessions', async () => {
+  const phone = await call('POST', '/auth/login', { body: { email: student.email, password: student.password } });
+  const laptop = await call('POST', '/auth/login', { body: { email: student.email, password: student.password } });
+  assert.equal((await call('GET', '/auth/me', { cookie: laptop.cookie })).status, 200);
+
+  // Someone copied the laptop's cookie before the user signed out.
+  const copied = laptop.cookie;
+  assert.equal((await call('POST', '/auth/logout', { cookie: laptop.cookie })).status, 204);
+  assert.equal((await call('GET', '/auth/me', { cookie: copied })).status, 401);
+
+  // Signing out on the laptop doesn't sign out the phone.
+  assert.equal((await call('GET', '/auth/me', { cookie: phone.cookie })).status, 200);
+
+  // Logging out with no cookie, or a broken one, is still fine.
+  assert.equal((await call('POST', '/auth/logout')).status, 204);
+  assert.equal((await call('POST', '/auth/logout', { cookie: 'gp_session=broken' })).status, 204);
+});
+
+test('tokens without an ID (issued before logout revocation) are refused', async () => {
+  const jwt = (await import('jsonwebtoken')).default;
+  const user = await users.findByEmail(student.email);
+  const old = jwt.sign({ role: user.role }, process.env.JWT_SECRET, { subject: user.id, expiresIn: '1h', algorithm: 'HS256' });
+  assert.equal((await call('GET', '/auth/me', { cookie: `gp_session=${old}` })).status, 401);
+});
+
 test('duplicate email or ID is refused', async () => {
   const res = await call('POST', '/auth/register', { body: { ...student, email: 'other@adnu.edu.ph' } });
   assert.equal(res.status, 409);
