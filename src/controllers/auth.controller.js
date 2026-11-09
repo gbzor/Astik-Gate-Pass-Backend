@@ -1,6 +1,6 @@
 // Auth request handlers. HTTP only: read the request, call the service, send the response.
 // All logic and database access lives in services/auth.service.js.
-import { clearSessionCookie, setSessionCookie } from '../middleware/auth.js';
+import { endSession, setSessionCookie } from '../middleware/auth.js';
 import * as authService from '../services/auth.service.js';
 import { publicUser } from '../utils/present.js';
 
@@ -24,9 +24,9 @@ export const login = (req, res) => signIn(req, res, 'user');
 // POST /api/auth/admin/login: admin login page.
 export const adminLogin = (req, res) => signIn(req, res, 'admin');
 
-// POST /api/auth/logout
+// POST /api/auth/logout: the token stops working at once, even if someone copied it.
 export function logout(req, res) {
-  clearSessionCookie(res);
+  endSession(req, res);
   res.status(204).end();
 }
 
