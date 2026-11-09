@@ -6,3 +6,20 @@ export function validateBody(schema) {
     next();
   };
 }
+
+// Checks the URL's ?query=string. Express 5 makes req.query read-only, so the
+// cleaned values go on req.validQuery instead. Controllers read only req.validQuery.
+export function validateQuery(schema) {
+  return (req, res, next) => {
+    req.validQuery = schema.parse(req.query ?? {});
+    next();
+  };
+}
+
+// Checks route parameters such as /vehicles/:id and replaces them with the cleaned values.
+export function validateParams(schema) {
+  return (req, res, next) => {
+    req.params = schema.parse(req.params ?? {});
+    next();
+  };
+}

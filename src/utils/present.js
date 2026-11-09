@@ -15,3 +15,25 @@ export function publicUser(user) {
     createdAt: user.createdAt,
   };
 }
+
+// A vehicle as the API sends it. `owner` is only filled in on admin views.
+export function publicVehicle(vehicle) {
+  if (!vehicle) return null;
+  return {
+    id: vehicle.id,
+    ownerId: vehicle.ownerId,
+    plateNumber: vehicle.plateNumber,
+    type: vehicle.type,
+    make: vehicle.make,
+    model: vehicle.model,
+    color: vehicle.color,
+    createdAt: vehicle.createdAt,
+    updatedAt: vehicle.updatedAt,
+    ...(vehicle.owner && { owner: vehicle.owner }),
+  };
+}
+
+// Paging details sent with every list, so the frontend can draw "Page 2 of 7".
+export function pageInfo({ page, limit }, total) {
+  return { page, limit, total, totalPages: Math.max(1, Math.ceil(total / limit)) };
+}
