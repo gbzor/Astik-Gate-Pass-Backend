@@ -1,9 +1,10 @@
 # Database contract (for the database developer)
 
 The backend reads and writes data only through `src/db/index.js`, and only the files in
-`src/services/` call it (controllers go through a service). Right now that file stores
-everything in memory, so it's lost on restart. To connect a real database, replace each function
-body with real queries. Nothing else in the backend needs to change.
+`src/services/` call it (controllers go through a service). That file talks to **PostgreSQL**
+(Supabase or Neon) through the `pg` connection pool. The tables are defined in `src/db/schema.sql`.
+To add a feature, add its functions to `src/db/index.js` (and its tables to `schema.sql`) and
+document them here. Nothing else in the backend needs to change.
 
 **Rules**
 
@@ -14,8 +15,7 @@ body with real queries. Nothing else in the backend needs to change.
 5. Store connection details in `.env` (for example `DATABASE_URL`), never in code.
 6. Run `npm test` when you finish.
 
-Free hosted options with no card required: **Supabase** or **Neon** (Postgres), **Aiven** (MySQL).
-Check the current free-tier limits before choosing.
+Hosting: free **Neon** or **Supabase** (Postgres), no card required. Check the current free-tier limits.
 
 ## Table: users
 
@@ -53,3 +53,13 @@ Check the current free-tier limits before choosing.
 2. Run `src/db/schema.sql` once in the Supabase/Neon SQL editor.
 3. `npm test` uses `TEST_DATABASE_URL`, a separate empty database, never `DATABASE_URL`. It runs
    `schema.sql` there and **erases every table** before each run, so it can be repeated.
+
+## SSL note
+
+`src/db/index.js` connects with `ssl: { rejectUnauthorized: true }` (hosted databases only; local
+ones skip SSL). This works with Neon. If Supabase fails with "self-signed certificate in
+certificate chain", pass Supabase's CA certificate in `ssl.ca`. Never set `rejectUnauthorized` to `false`.
+
+## Starting over (development only)
+
+`src/db/reset.sql` drops every table. Run it, then `schema.sql`, only on a throwaway database.

@@ -1,6 +1,6 @@
 -- Astik Gate Pass: schema with relationships + constraints (Postgres 13+).
 -- Tables are created in dependency order. Safe to re-run on a FRESH database.
--- If an older version of this file was already run, run reset.sql first
+-- If an older version of this file was already run, run reset.sql first (dev only, deletes data)
 -- (CREATE TABLE IF NOT EXISTS silently skips tables that already exist).
 
 CREATE OR REPLACE FUNCTION set_updated_at() RETURNS trigger AS $$
