@@ -1,6 +1,6 @@
 -- Astik Gate Pass: schema with relationships + constraints (Postgres 13+).
 -- Tables are created in dependency order. Safe to re-run on a FRESH database.
--- If an older version of this file was already run, run reset.sql first (dev only, deletes data)
+-- If an older version of this file was already run, run reset.sql first
 -- (CREATE TABLE IF NOT EXISTS silently skips tables that already exist).
 
 CREATE OR REPLACE FUNCTION set_updated_at() RETURNS trigger AS $$
@@ -55,6 +55,8 @@ CREATE TABLE IF NOT EXISTS vehicles (
   make          VARCHAR(40),
   model         VARCHAR(40),
   color         VARCHAR(30),
+  -- FALSE = deactivated: kept for sticker/parking history but no longer usable.
+  is_active     BOOLEAN     NOT NULL DEFAULT TRUE,
   created_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
   updated_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
   CONSTRAINT vehicles_plate_uppercase CHECK (plate_number = upper(plate_number)),
@@ -62,6 +64,8 @@ CREATE TABLE IF NOT EXISTS vehicles (
   -- Lets child tables prove "this vehicle belongs to this user".
   CONSTRAINT vehicles_id_owner_key UNIQUE (id, owner_id)
 );
+-- For databases created before is_active existed (CREATE TABLE above skips existing tables).
+ALTER TABLE vehicles ADD COLUMN IF NOT EXISTS is_active BOOLEAN NOT NULL DEFAULT TRUE;
 CREATE INDEX IF NOT EXISTS idx_vehicles_owner ON vehicles(owner_id);
 
 -- 4. PARKING AREAS ----------------------------------------------------------
