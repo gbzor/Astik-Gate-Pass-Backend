@@ -51,6 +51,8 @@ const UPDATABLE = {
   contactNumber: 'contact_number',
 };
 
+const isUuid = (id) => /^[0-9a-f-]{36}$/i.test(String(id));
+
 // Postgres error 23505 = unique violation (duplicate email or school ID).
 const isDuplicate = (err) => err.code === '23505';
 const DUPLICATE_MESSAGE = 'An account with this email or ID number already exists.';
@@ -121,6 +123,95 @@ export const users = {
       return toUser(rows[0]);
     } catch (err) {
       if (isDuplicate(err)) throw new HttpError(409, DUPLICATE_MESSAGE);
+      throw err;
+    }
+  },
+};
+
+// --- vehicles ---------------------------------------------------------------
+function toVehicle(row) {
+  if (!row) return null;
+  return {
+    id: row.id,
+    ownerId: row.owner_id,
+    plateNumber: row.plate_number,
+    type: row.type,
+    make: row.make,
+    model: row.model,
+    color: row.color,
+    isActive: row.is_active,
+    createdAt: row.created_at.toISOString(),
+    updatedAt: row.updated_at.toISOString(),
+  };
+}
+
+// Only these fields may change through vehicles.update (the owner never changes).
+const VEHICLE_UPDATABLE = {
+  plateNumber: 'plate_number',
+  type: 'type',
+  make: 'make',
+  model: 'model',
+  color: 'color',
+  isActive: 'is_active',
+};
+
+const PLATE_TAKEN = 'That plate number is already registered.';
+// 23503 = foreign key violation, 23001 = restrict violation: stickers or parking records still point here.
+const VEHICLE_HAS_HISTORY = 'This vehicle has sticker or parking records and cannot be deleted. Deactivate it instead.';
+
+export const vehicles = {
+  async findById(id) {
+    if (!isUuid(id)) return null;
+    const { rows } = await pool.query('SELECT * FROM vehicles WHERE id = $1', [id]);
+    return toVehicle(rows[0]);
+  },
+  async findByPlateNumber(plateNumber) {
+    const { rows } = await pool.query('SELECT * FROM vehicles WHERE plate_number = $1', [plateNumber.toUpperCase()]);
+    return toVehicle(rows[0]);
+  },
+  // Every vehicle of one owner, active and deactivated, newest first.
+  async listByOwner(ownerId) {
+    if (!isUuid(ownerId)) return [];
+    const { rows } = await pool.query('SELECT * FROM vehicles WHERE owner_id = $1 ORDER BY created_at DESC', [ownerId]);
+    return rows.map(toVehicle);
+  },
+  async create(data) {
+    try {
+      const { rows } = await pool.query(
+        `INSERT INTO vehicles (owner_id, plate_number, type, make, model, color)
+         VALUES ($1, $2, $3, $4, $5, $6)
+         RETURNING *`,
+        [data.ownerId, data.plateNumber.toUpperCase(), data.type, data.make ?? null, data.model ?? null, data.color ?? null],
+      );
+      return toVehicle(rows[0]);
+    } catch (err) {
+      if (isDuplicate(err)) throw new HttpError(409, PLATE_TAKEN);
+      throw err;
+    }
+  },
+  async update(id, patch) {
+    if (!isUuid(id)) return null;
+    const entries = Object.entries(patch).filter(([key]) => key in VEHICLE_UPDATABLE);
+    if (entries.length === 0) return vehicles.findById(id);
+    const values = entries.map(([key, value]) => (key === 'plateNumber' ? value.toUpperCase() : value));
+    // Column names come from the fixed list above, never from user input; values are parameters.
+    const sets = entries.map(([key], i) => `${VEHICLE_UPDATABLE[key]} = $${i + 2}`).join(', ');
+    try {
+      const { rows } = await pool.query(`UPDATE vehicles SET ${sets} WHERE id = $1 RETURNING *`, [id, ...values]);
+      return toVehicle(rows[0]);
+    } catch (err) {
+      if (isDuplicate(err)) throw new HttpError(409, PLATE_TAKEN);
+      throw err;
+    }
+  },
+  // true if a row was deleted, false if it didn't exist.
+  async remove(id) {
+    if (!isUuid(id)) return false;
+    try {
+      const { rowCount } = await pool.query('DELETE FROM vehicles WHERE id = $1', [id]);
+      return rowCount > 0;
+    } catch (err) {
+      if (err.code === '23503' || err.code === '23001') throw new HttpError(409, VEHICLE_HAS_HISTORY);
       throw err;
     }
   },

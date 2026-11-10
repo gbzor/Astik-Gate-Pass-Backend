@@ -8,27 +8,11 @@ body with real queries. Nothing else in the backend needs to change.
 **Rules**
 
 1. Keep every function name, its parameters and its return shape. Functions are `async`.
-2. Return plain objects with the **camelCase** field names below. Map `snake_case` columns (like `toUser()` does).
+2. Return plain objects with the **camelCase** field names below. Map `snake_case` columns if you use them.
 3. Return `null` when a single row isn't found.
-4. Parameterized queries only (`$1`, `$2`...). Never build SQL by joining strings with user input.
-   Dynamic column names must come from a fixed whitelist (see `UPDATABLE` in `db/index.js`).
-5. Multi-step writes go in a transaction (`BEGIN` / `COMMIT` / `ROLLBACK` with `pool.connect()`; see `users.create`).
-6. Map Postgres error `23505` (duplicate) to `HttpError(409, ...)`. Never leak raw database errors to the client.
-7. Keep this file plain data access: query in, plain object out. No `req`/`res` and no business rules
-   (for example "only admins can approve" belongs in a service). Data rules that protect integrity
-   (`UNIQUE`, `FOREIGN KEY`, `CHECK`, `NOT NULL`) belong in `schema.sql`.
-8. Only files in `src/services/` import this file. `test/layers.test.js` fails if anything else does.
-9. Store connection details in `.env` (`DATABASE_URL`), never in code. Tests use a separate, empty
-   `TEST_DATABASE_URL`, because they erase all tables.
-10. Run `npm test` before opening a pull request.
-
-### Adding a new table's functions
-
-1. Add the table to `src/db/schema.sql`, after the tables it references.
-2. Add its functions to `src/db/index.js`, grouped under one object (like `users`).
-3. Document the functions and return shapes in this file.
-4. Tell the test owner, who must add the new table to the `TRUNCATE` list in `test/auth.test.js`.
-5. Don't rename existing tables or columns without telling the people whose services use them.
+4. Use parameterized queries or an ORM. Never build SQL by joining strings with user input.
+5. Store connection details in `.env` (for example `DATABASE_URL`), never in code.
+6. Run `npm test` when you finish.
 
 Free hosted options with no card required: **Supabase** or **Neon** (Postgres), **Aiven** (MySQL).
 Check the current free-tier limits before choosing.
@@ -57,10 +41,33 @@ Check the current free-tier limits before choosing.
 | `users.create(data)` | the new user, with `id`, `createdAt`, `updatedAt` filled in |
 | `users.update(id, patch)` | the updated user, or `null` if not found |
 
+## Table: vehicles
+
+| Field | Type | Notes |
+|---|---|---|
+| id | uuid PK | |
+| ownerId | uuid FK to `users` | Never changes after creation |
+| plateNumber | varchar(15) **unique** | Stored uppercase, 3-15 characters of A-Z, 0-9, space, dash |
+| type | enum `car`, `motorcycle`, `tricycle`, `van`, `other` | |
+| make, model, color | varchar, nullable | |
+| isActive | boolean, default `true` | `false` = deactivated (kept for sticker and parking history) |
+| createdAt, updatedAt | timestamptz | |
+
+## Functions: vehicles
+
+| Function | Returns |
+|---|---|
+| `vehicles.findById(id)` | vehicle or `null` |
+| `vehicles.findByPlateNumber(plateNumber)` | vehicle or `null` (case-insensitive) |
+| `vehicles.listByOwner(ownerId)` | array of vehicles (active and deactivated), newest first |
+| `vehicles.create(data)` | the new vehicle; duplicate plate throws `HttpError(409)` |
+| `vehicles.update(id, patch)` | the updated vehicle or `null`; patch may hold `plateNumber, type, make, model, color, isActive` |
+| `vehicles.remove(id)` | `true` if deleted, `false` if not found; if stickers or parking records exist it throws `HttpError(409)` (deactivate instead) |
+
 ## Other tables (created in `src/db/schema.sql`, functions still to come)
 
 `admin_accounts` (one row per admin user; created automatically by `users.create` for role `admin`),
-`vehicles`, `campus_stickers` (the sticker applications; approved/rejected by an admin account),
+`campus_stickers` (the sticker applications; approved/rejected by an admin account),
 `parking_areas`, `parking_records`. Relationships and rules are documented inside `schema.sql`.
 
 ## Setup
