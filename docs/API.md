@@ -38,7 +38,7 @@ Validation errors (400) also list the fields to highlight:
 | 401 | Not signed in, or wrong email/password |
 | 403 | Signed in but not allowed (wrong role, disabled account) |
 | 404 | Not found |
-| 409 | Conflict: already exists (email, ID number, plate number), or the record is in use |
+| 409 | Conflict: already exists (email, ID number, plate number, sticker number), the record is in use, or it was already reviewed |
 | 429 | Too many requests. Wait and try again |
 | 500 | Server error (details are only in the server log) |
 
@@ -110,7 +110,7 @@ Returns the signed-in user. → `200 { "user": { ...user } }`, or `401` if not s
 
 ## Lists: paging, sorting and search
 
-Admin lists (`GET /users`, `GET /vehicles`) accept these query parameters:
+Admin lists (`GET /users`, `GET /vehicles`, `GET /sticker-applications`) accept these query parameters:
 
 | Parameter | Default | Notes |
 |---|---|---|
@@ -216,13 +216,108 @@ Send only the fields that change. `null` or `""` clears `make`, `model` or `colo
   "make": "Toyota",
   "model": "Vios",
   "color": "White",
+  "isActive": true,
   "createdAt": "2026-11-09T…",
   "updatedAt": "2026-11-09T…",
   "owner": { "id": "…", "firstName": "Ana", "lastName": "Reyes", "fullName": "Ana Reyes",
              "schoolId": "2023-00001", "email": "ana@gbox.adnu.edu.ph", "role": "student" }
 }
 ```
-`owner` is only included in admin views.
+`owner` is only included in admin views. `isActive: false` means the vehicle is deactivated: it stays
+in the records but can't get a campus sticker (hide or disable its "Apply for sticker" button).
+
+---
+
+## Campus sticker applications
+
+A student or faculty member applies for a sticker for one of their vehicles. An admin then approves it
+(giving a sticker number and an expiry date) or rejects it (giving a reason).
+
+| Status | Meaning | Can change to |
+|---|---|---|
+| `pending` | Waiting for an admin | `approved` or `rejected` |
+| `approved` | Sticker issued (`stickerNumber`, `expiresAt` are set) | (final) |
+| `rejected` | Refused (`rejectionReason` is set) | (final); the vehicle can be applied for again |
+
+A vehicle can have only **one** `pending` or `approved` application at a time.
+
+### `POST /sticker-applications` 🔒 student, faculty
+Applies for a sticker for one of **your own active** vehicles. The applicant always comes from the session.
+```json
+{ "vehicleId": "9b06…uuid" }
+```
+→ `201 { "application": { ...application } }` with `status: "pending"`
+→ `404` if the vehicle doesn't exist **or isn't yours**.
+→ `409` if the vehicle already has a pending or approved application, or is deactivated.
+
+### `GET /sticker-applications/mine` 🔒 student, faculty
+Your own applications, newest first (up to 100). Optional filter: `status` (`pending`, `approved`, `rejected`).
+```
+GET /sticker-applications/mine?status=pending
+```
+→ `200 { "applications": [ ...application ] }`
+
+### `GET /sticker-applications` 🔒 admin
+Every application, with applicant details. Paging, sorting and search work like the other admin lists.
+Filters: `status`, `applicantRole` (`student`, `faculty`), `applicantId`, `vehicleId`,
+`q` (plate number, sticker number, applicant name or ID number).
+Sort: `createdAt`, `reviewedAt`, `status`, `plateNumber`, `stickerNumber`, `expiresAt`.
+```
+GET /sticker-applications?status=pending&sort=createdAt&order=asc
+```
+→ `200 { "applications": [ ...application with applicant ], "pagination": { … } }`
+
+### `GET /sticker-applications/:id` 🔒 applicant or admin
+→ `200 { "application": { ...application } }`. Admins also get `applicant` and `reviewedBy`.
+→ `404` if it doesn't exist **or belongs to someone else**.
+
+### `PATCH /sticker-applications/:id/approve` 🔒 admin
+Approves a **pending** application and issues the sticker.
+```json
+{ "stickerNumber": "2026-0001", "expiresAt": "2027-06-30" }
+```
+- `stickerNumber`: 1–20 letters, numbers or hyphens, saved in capitals. Must be unique.
+- `expiresAt`: a date (`YYYY-MM-DD`, from `<input type="date">`), meaning the **end of that day, Philippine time**,
+  or a full ISO date-time with a time zone (`2027-06-30T17:00:00+08:00`). Must be in the future and at most 730 days away.
+
+→ `200 { "application": { ...application } }` with `status: "approved"`
+→ `409` if it was already approved or rejected, the sticker number is taken, or the vehicle was deactivated.
+
+### `PATCH /sticker-applications/:id/reject` 🔒 admin
+Rejects a **pending** application. The reason is shown to the applicant, so write it for them.
+```json
+{ "reason": "The OR/CR photo is unreadable. Please apply again." }
+```
+- `reason`: 3–500 characters. Line breaks are allowed.
+
+→ `200 { "application": { ...application } }` with `status: "rejected"`
+→ `409` if it was already approved or rejected.
+
+### The `application` object
+```json
+{
+  "id": "5d2e…uuid",
+  "status": "approved",
+  "vehicleId": "9b06…uuid",
+  "applicantId": "4cc0…uuid",
+  "stickerNumber": "2026-0001",
+  "expiresAt": "2027-06-30T15:59:59.999Z",
+  "rejectionReason": null,
+  "reviewedAt": "2026-11-15T…",
+  "createdAt": "2026-11-15T…",
+  "updatedAt": "2026-11-15T…",
+  "vehicle": { "id": "9b06…uuid", "plateNumber": "ABC 1234", "type": "car", "make": "Toyota",
+               "model": "Vios", "color": "White", "isActive": true },
+  "applicant": { "id": "…", "firstName": "Ana", "lastName": "Reyes", "fullName": "Ana Reyes",
+                 "schoolId": "2023-00001", "email": "ana@gbox.adnu.edu.ph", "role": "student" },
+  "reviewedBy": { "id": "…", "fullName": "System Admin" }
+}
+```
+- `applicant` and `reviewedBy` are only included in admin views.
+- `stickerNumber` and `expiresAt` are `null` unless approved; `rejectionReason` is `null` unless rejected;
+  `reviewedAt` is `null` while pending. Dates are in UTC: show them with
+  `new Date(expiresAt).toLocaleDateString('en-PH')`.
+- Show `rejectionReason` as **text** (`textContent`), never as HTML.
 
 ---
 

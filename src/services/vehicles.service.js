@@ -18,7 +18,7 @@ const NOT_FOUND = 'Vehicle not found.';
 
 // Columns returned for a vehicle, plus its owner's public details (never the password hash).
 const SELECT_VEHICLE = `
-  SELECT v.id, v.owner_id, v.plate_number, v.type, v.make, v.model, v.color,
+  SELECT v.id, v.owner_id, v.plate_number, v.type, v.make, v.model, v.color, v.is_active,
          v.created_at, v.updated_at,
          u.first_name AS owner_first_name, u.last_name AS owner_last_name,
          u.school_id AS owner_school_id, u.email AS owner_email, u.role AS owner_role
@@ -53,6 +53,8 @@ function toVehicle(row, { withOwner = false } = {}) {
     make: row.make,
     model: row.model,
     color: row.color,
+    // false = deactivated: kept for the records, but it can't get a campus sticker.
+    isActive: row.is_active,
     createdAt: row.created_at.toISOString(),
     updatedAt: row.updated_at.toISOString(),
     ...(withOwner && {

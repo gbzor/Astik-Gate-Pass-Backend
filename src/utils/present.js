@@ -27,6 +27,7 @@ export function publicVehicle(vehicle) {
     make: vehicle.make,
     model: vehicle.model,
     color: vehicle.color,
+    isActive: vehicle.isActive,
     createdAt: vehicle.createdAt,
     updatedAt: vehicle.updatedAt,
     ...(vehicle.owner && { owner: vehicle.owner }),
