@@ -17,7 +17,8 @@ The frontend lives in the main project repo: <https://github.com/gbzor/Astik-Gat
 | Authentication | `/api/auth/register`, `/login`, `/admin/login`, `/logout`, `/me` | ✅ |
 | User management | `/api/users`, `/api/users/me`, `/api/users/:id`, `/api/users/:id/status` | ✅ |
 | Vehicles | `/api/vehicles`, `/api/vehicles/mine`, `/api/vehicles/:id` | ✅ |
-| Campus sticker applications | | Next |
+| Campus sticker applications: submit, view, approve, reject | `/api/sticker-applications`, `/mine`, `/:id`, `/:id/approve`, `/:id/reject` | ✅ |
+| Sticker number auto-assignment, expiry management, approval history | | Next |
 | Admin dashboard and records | | Planned |
 | Parking areas and records, map | | Planned |
 

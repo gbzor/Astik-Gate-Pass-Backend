@@ -18,6 +18,13 @@ export const VEHICLE_TYPES = Object.freeze(['car', 'motorcycle', 'tricycle', 'va
 // How many vehicles one student or faculty member may register (limits spam/abuse).
 export const MAX_VEHICLES_PER_USER = 5;
 
+// Campus sticker application statuses (must match the CHECK in src/db/schema.sql).
+// pending -> approved, or pending -> rejected. A reviewed application never changes again.
+export const STICKER_STATUSES = Object.freeze(['pending', 'approved', 'rejected']);
+
+// Longest validity an admin can give a sticker when approving it (about 2 school years).
+export const STICKER_MAX_VALIDITY_DAYS = 730;
+
 // Record lists: default and largest page size (stops one request from dumping every row).
 export const PAGE_SIZE_DEFAULT = 20;
 export const PAGE_SIZE_MAX = 100;
