@@ -8,6 +8,8 @@
 
 -- Child tables first, so foreign keys don't block the drops (CASCADE covers the rest).
 DROP TABLE IF EXISTS parking_records CASCADE;
+DROP TABLE IF EXISTS sticker_application_history CASCADE;
+DROP TABLE IF EXISTS sticker_number_counters CASCADE;
 DROP TABLE IF EXISTS campus_stickers CASCADE;
 DROP TABLE IF EXISTS parking_areas   CASCADE;
 DROP TABLE IF EXISTS vehicles        CASCADE;
@@ -15,3 +17,9 @@ DROP TABLE IF EXISTS admin_accounts  CASCADE;
 DROP TABLE IF EXISTS users           CASCADE;
 
 DROP FUNCTION IF EXISTS set_updated_at();
+DROP FUNCTION IF EXISTS forbid_history_changes();
+DROP FUNCTION IF EXISTS next_sticker_number(INTEGER);
+DROP FUNCTION IF EXISTS expire_stickers();
+DROP FUNCTION IF EXISTS expire_vehicle_stickers_before_insert();
+DROP FUNCTION IF EXISTS assign_sticker_number();
+DROP FUNCTION IF EXISTS log_sticker_status_change();
