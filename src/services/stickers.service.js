@@ -18,6 +18,11 @@ import {
 import { pool } from '../db/index.js';
 import { HttpError } from '../utils/httpError.js';
 import { likePattern, sortColumns } from '../utils/sql.js';
+import {
+  notifyStickerApproved,
+  notifyStickerRejected,
+  notifyStickerSubmitted,
+} from './notify.service.js';
 
 const NOT_FOUND = 'Sticker application not found.';
 const VEHICLE_NOT_FOUND = 'Vehicle not found.';
@@ -140,7 +145,9 @@ export async function submitApplication(applicant, { vehicleId }) {
     if (!rows[0] || rows[0].owner_id !== applicant.id) throw new HttpError(404, VEHICLE_NOT_FOUND);
     throw new HttpError(409, VEHICLE_INACTIVE);
   }
-  return toApplication(await findAccessible(applicant, id));
+  const application = toApplication(await findAccessible(applicant, id));
+  notifyStickerSubmitted(application).catch(() => {});
+  return application;
 }
 
 // GET /api/sticker-applications/mine: your own applications, newest first.
@@ -238,19 +245,23 @@ async function review(admin, id, { setSql, params, requireActiveVehicle }) {
 
 // PATCH /api/sticker-applications/:id/approve (admin): issues the sticker.
 // The database requires a sticker number and an expiry date on every approved sticker.
-export function approveApplication(admin, id, { stickerNumber, expiresAt }) {
-  return review(admin, id, {
+export async function approveApplication(admin, id, { stickerNumber, expiresAt }) {
+  const application = await review(admin, id, {
     setSql: 'status = $4, sticker_number = $5, expires_at = $6, rejection_reason = NULL',
     params: [STICKER_STATUS.APPROVED, stickerNumber, expiresAt],
     requireActiveVehicle: true,
   });
+  notifyStickerApproved(application).catch(() => {});
+  return application;
 }
 
 // PATCH /api/sticker-applications/:id/reject (admin): the reason is shown to the applicant.
-export function rejectApplication(admin, id, { reason }) {
-  return review(admin, id, {
+export async function rejectApplication(admin, id, { reason }) {
+  const application = await review(admin, id, {
     setSql: 'status = $4, rejection_reason = $5, sticker_number = NULL, expires_at = NULL',
     params: [STICKER_STATUS.REJECTED, reason],
     requireActiveVehicle: false,
   });
+  notifyStickerRejected(application).catch(() => {});
+  return application;
 }
