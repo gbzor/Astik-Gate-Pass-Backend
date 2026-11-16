@@ -141,6 +141,9 @@ To use this, the API must allow the number to be omitted and pass `NULL`.
 ## Setup
 
 1. Put your connection string in `.env` as `DATABASE_URL=...` (never commit it).
-2. Run `src/db/schema.sql` once in the Supabase/Neon SQL editor.
+2. Build the tables with `npm run db:migrate` (or paste `src/db/schema.sql` into the Supabase/Neon SQL editor).
+   It is safe to run again later: it upgrades an existing database without deleting data.
 3. `npm test` uses `TEST_DATABASE_URL`, a separate empty database, never `DATABASE_URL`. It runs
    `schema.sql` there and **erases every table** before each run, so it can be repeated.
+4. Optional sample data for development: `npm run db:sample`. See `docs/DATABASE_STRUCTURE.md` for the
+   diagram, every table and the SQL files.
