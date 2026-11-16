@@ -1,5 +1,6 @@
 // Auth request handlers. HTTP only: read the request, call the service, send the response.
 // All logic and database access lives in services/auth.service.js.
+import { LOGIN_PORTAL } from '../config/constants.js';
 import { endSession, setSessionCookie } from '../middleware/auth.js';
 import * as authService from '../services/auth.service.js';
 import { publicUser } from '../utils/present.js';
@@ -19,10 +20,10 @@ async function signIn(req, res, portal) {
 }
 
 // POST /api/auth/login: student and faculty login page.
-export const login = (req, res) => signIn(req, res, 'user');
+export const login = (req, res) => signIn(req, res, LOGIN_PORTAL.MEMBER);
 
 // POST /api/auth/admin/login: admin login page.
-export const adminLogin = (req, res) => signIn(req, res, 'admin');
+export const adminLogin = (req, res) => signIn(req, res, LOGIN_PORTAL.ADMIN);
 
 // POST /api/auth/logout: the token stops working at once, even if someone copied it.
 export function logout(req, res) {

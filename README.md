@@ -86,7 +86,8 @@ src/
   server.js                 starts the server
   app.js                    security headers, CORS, JSON, routes
   config/env.js             reads and checks .env
-  config/constants.js       roles, statuses, vehicle types, limits
+  config/constants.js       EVERY fixed rule: roles, statuses, input limits and patterns,
+                            rate limits, cookie settings, sort fields (add new ones here)
   routes/                   URLs for each feature, mounted in routes/index.js under /api
   controllers/              request handlers (HTTP only: read request, call a service, respond)
   services/                 business rules and ownership checks; the ONLY layer that uses the database

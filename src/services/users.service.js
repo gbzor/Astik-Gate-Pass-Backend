@@ -4,21 +4,22 @@
 // Single-user reads and writes go through the existing users.* functions in src/db/index.js.
 // The admin list needs search and paging, so it runs its own parameterized query here
 // (src/db/ is owned by the database developer and is not changed).
+import { ROLE, USER_SORT_FIELDS } from '../config/constants.js';
 import { pool, users } from '../db/index.js';
 import { HttpError } from '../utils/httpError.js';
-import { likePattern } from '../utils/sql.js';
+import { likePattern, sortColumns } from '../utils/sql.js';
 import { listOwnVehicles } from './vehicles.service.js';
 
 const NOT_FOUND = 'User not found.';
 
-// API sort name -> database column. Only these can be sorted on.
-const SORTABLE = {
+// API sort name (USER_SORT_FIELDS in constants.js) -> database column. Only these can be sorted on.
+const SORTABLE = sortColumns(USER_SORT_FIELDS, {
   createdAt: 'u.created_at',
   lastName: 'u.last_name',
   firstName: 'u.first_name',
   email: 'u.email',
   schoolId: 'u.school_id',
-};
+});
 
 // PATCH /api/users/me: only first and last name (the validator drops everything else).
 export async function updateProfile(userId, { firstName, lastName }) {
@@ -91,6 +92,6 @@ export async function setUserStatus(actor, id, status) {
   const target = await users.findById(id);
   if (!target) throw new HttpError(404, NOT_FOUND);
   // Admin accounts are managed separately, so one admin can't lock out another.
-  if (target.role === 'admin') throw new HttpError(403, 'Admin accounts can\'t be changed here.');
+  if (target.role === ROLE.ADMIN) throw new HttpError(403, 'Admin accounts can\'t be changed here.');
   return users.update(id, { status });
 }
