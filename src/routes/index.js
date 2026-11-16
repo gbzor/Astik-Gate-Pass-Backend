@@ -5,7 +5,8 @@
 // Adding a new feature (vehicles, applications, parking...):
 //   1. Create routes/<feature>.routes.js, controllers/<feature>.controller.js
 //      and services/<feature>.service.js
-//   2. Protect it:   requireAuth, requireRole('admin')   (or 'student', 'faculty')
+//   2. Protect it:   requireAuth, requireRole(ROLE.ADMIN)   (or ...MEMBER_ROLES), from config/constants.js
+//      Put any new limit, status or rule in config/constants.js, not in the feature files.
 //   3. Validate it:  validateBody(<schema from validators/>)
 //   4. Mount it below.
 import { Router } from 'express';

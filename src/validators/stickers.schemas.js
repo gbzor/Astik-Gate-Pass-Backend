@@ -1,9 +1,18 @@
 // Inputs for the campus sticker application routes (/api/sticker-applications).
 import { z } from 'zod';
-import { STICKER_MAX_VALIDITY_DAYS, STICKER_STATUSES } from '../config/constants.js';
-import { order, pagination, searchText } from './common.schemas.js';
-
-const DAY_MS = 24 * 60 * 60 * 1000;
+import {
+  CAMPUS_UTC_OFFSET,
+  DAY_MS,
+  MEMBER_ROLES,
+  REJECTION_REASON_MAX_LENGTH,
+  REJECTION_REASON_MIN_LENGTH,
+  STICKER_MAX_VALIDITY_DAYS,
+  STICKER_NUMBER_MAX_LENGTH,
+  STICKER_NUMBER_PATTERN,
+  STICKER_SORT_FIELDS,
+  STICKER_STATUSES,
+} from '../config/constants.js';
+import { order, pagination, searchText, sortBy } from './common.schemas.js';
 
 const status = z.enum(STICKER_STATUSES, { error: `Status must be one of: ${STICKER_STATUSES.join(', ')}.` });
 
@@ -14,17 +23,16 @@ export const submitApplicationSchema = z.object({
 });
 
 // Printed on the physical sticker, e.g. "2026-0001" or "FAC-0042". Stored in capitals.
-// Max 20 characters to match campus_stickers.sticker_number in src/db/schema.sql.
 const stickerNumber = z.string().trim().toUpperCase()
   .min(1, 'Enter the sticker number.')
-  .max(20, 'Use 20 characters or fewer.')
-  .regex(/^[A-Z0-9-]+$/, 'Use letters, numbers and hyphens only.')
+  .max(STICKER_NUMBER_MAX_LENGTH, `Use ${STICKER_NUMBER_MAX_LENGTH} characters or fewer.`)
+  .regex(STICKER_NUMBER_PATTERN, 'Use letters, numbers and hyphens only.')
   .regex(/[A-Z0-9]/, 'Enter a valid sticker number.');
 
-// A date from an <input type="date"> ("2027-06-30") means the END of that day in Philippine time.
+// A date from an <input type="date"> ("2027-06-30") means the END of that day in campus time.
 // A full ISO date-time with a time zone ("2027-06-30T17:00:00+08:00") is used as given.
 const expiresAt = z.union([
-  z.iso.date().transform((d) => new Date(`${d}T23:59:59.999+08:00`)),
+  z.iso.date().transform((d) => new Date(`${d}T23:59:59.999${CAMPUS_UTC_OFFSET}`)),
   z.iso.datetime({ offset: true }).transform((d) => new Date(d)),
 ], { error: 'Use a date like 2027-06-30.' })
   .refine((d) => d.getTime() > Date.now(), 'The expiry date must be in the future.')
@@ -43,8 +51,8 @@ export const approveApplicationSchema = z.object({
 // Line breaks are allowed; other invisible control characters are not.
 export const rejectApplicationSchema = z.object({
   reason: z.string().trim()
-    .min(3, 'Tell the applicant why (at least 3 characters).')
-    .max(500, 'Use 500 characters or fewer.')
+    .min(REJECTION_REASON_MIN_LENGTH, `Tell the applicant why (at least ${REJECTION_REASON_MIN_LENGTH} characters).`)
+    .max(REJECTION_REASON_MAX_LENGTH, `Use ${REJECTION_REASON_MAX_LENGTH} characters or fewer.`)
     .refine((v) => !/\p{Cc}/u.test(v.replace(/\r?\n/g, '')), 'Remove special or invisible characters.'),
 });
 
@@ -56,11 +64,11 @@ export const listMyApplicationsQuery = z.object({
 // GET /api/sticker-applications?status=pending&q=abc&page=1&limit=20&sort=createdAt&order=desc (admin)
 export const listApplicationsQuery = z.object({
   status: status.optional(),
-  applicantRole: z.enum(['student', 'faculty']).optional(),
+  applicantRole: z.enum(MEMBER_ROLES).optional(),
   applicantId: z.uuid('Invalid applicant ID.').optional(),
   vehicleId: z.uuid('Invalid vehicle ID.').optional(),
   q: searchText,
-  sort: z.enum(['createdAt', 'reviewedAt', 'status', 'plateNumber', 'stickerNumber', 'expiresAt']).default('createdAt'),
+  sort: sortBy(STICKER_SORT_FIELDS),
   order,
   ...pagination,
 });

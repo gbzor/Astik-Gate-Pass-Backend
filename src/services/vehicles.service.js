@@ -8,10 +8,12 @@
 // Ownership rule: students and faculty can only see and change their OWN vehicles.
 // Someone else's vehicle answers "not found" (404), not "forbidden", so nobody can
 // probe which vehicle IDs exist. Admins can see and manage every vehicle.
-import { MAX_VEHICLES_PER_USER } from '../config/constants.js';
+import {
+  MAX_VEHICLES_PER_USER, PG_ERROR, PG_STILL_REFERENCED, ROLE, VEHICLE_SORT_FIELDS,
+} from '../config/constants.js';
 import { pool } from '../db/index.js';
 import { HttpError } from '../utils/httpError.js';
-import { likePattern, PG_STILL_REFERENCED, PG_UNIQUE_VIOLATION } from '../utils/sql.js';
+import { likePattern, sortColumns } from '../utils/sql.js';
 
 const DUPLICATE_PLATE = 'This plate number is already registered.';
 const NOT_FOUND = 'Vehicle not found.';
@@ -34,13 +36,13 @@ const UPDATABLE = {
   color: 'color',
 };
 
-// API sort name -> database column. Only these can be sorted on.
-const SORTABLE = {
+// API sort name (VEHICLE_SORT_FIELDS in constants.js) -> database column. Only these can be sorted on.
+const SORTABLE = sortColumns(VEHICLE_SORT_FIELDS, {
   createdAt: 'v.created_at',
   plateNumber: 'v.plate_number',
   type: 'v.type',
   make: 'v.make',
-};
+});
 
 // Database row (snake_case) -> app object (camelCase). Dates become ISO strings.
 function toVehicle(row, { withOwner = false } = {}) {
@@ -71,7 +73,7 @@ function toVehicle(row, { withOwner = false } = {}) {
   };
 }
 
-const isAdmin = (user) => user.role === 'admin';
+const isAdmin = (user) => user.role === ROLE.ADMIN;
 
 // Loads one vehicle if this user may see it; otherwise "not found".
 async function findAccessible(actor, id) {
@@ -114,7 +116,7 @@ export async function registerVehicle(owner, data) {
     id = rows[0].id;
   } catch (err) {
     await client.query('ROLLBACK');
-    if (err.code === PG_UNIQUE_VIOLATION) throw new HttpError(409, DUPLICATE_PLATE);
+    if (err.code === PG_ERROR.UNIQUE_VIOLATION) throw new HttpError(409, DUPLICATE_PLATE);
     throw err;
   } finally {
     client.release();
@@ -193,7 +195,7 @@ export async function updateVehicle(actor, id, patch) {
   try {
     await pool.query(`UPDATE vehicles SET ${sets} WHERE id = $1`, [id, ...entries.map(([, value]) => value)]);
   } catch (err) {
-    if (err.code === PG_UNIQUE_VIOLATION) throw new HttpError(409, DUPLICATE_PLATE);
+    if (err.code === PG_ERROR.UNIQUE_VIOLATION) throw new HttpError(409, DUPLICATE_PLATE);
     throw err;
   }
   return getVehicle(actor, id);

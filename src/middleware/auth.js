@@ -2,24 +2,30 @@
 import { randomUUID } from 'node:crypto';
 import jwt from 'jsonwebtoken';
 import { env } from '../config/env.js';
+import {
+  JWT_ALGORITHM,
+  SESSION_COOKIE_NAME,
+  SESSION_COOKIE_PATH,
+  SESSION_COOKIE_SAME_SITE,
+} from '../config/constants.js';
 import { getActiveUser } from '../services/auth.service.js';
 import { HttpError } from '../utils/httpError.js';
 import { isTokenRevoked, revokeToken } from '../utils/revokedTokens.js';
 
-export const SESSION_COOKIE = 'gp_session';
+export const SESSION_COOKIE = SESSION_COOKIE_NAME;
 
 const cookieOptions = {
   httpOnly: true, // page JavaScript (and XSS) can't read the token
   secure: env.isProd, // HTTPS only in production
-  sameSite: 'strict', // not sent on requests from other sites (blocks CSRF)
-  path: '/api',
+  sameSite: SESSION_COOKIE_SAME_SITE, // not sent on requests from other sites (blocks CSRF)
+  path: SESSION_COOKIE_PATH,
 };
 
 export function setSessionCookie(res, user) {
   const token = jwt.sign({ role: user.role }, env.jwtSecret, {
     subject: user.id,
     expiresIn: env.jwtExpiresIn,
-    algorithm: 'HS256',
+    algorithm: JWT_ALGORITHM,
     jwtid: randomUUID(), // unique token ID, so this one token can be signed out on logout
   });
   // No maxAge, so the cookie ends when the browser closes. The token itself also expires.
@@ -36,7 +42,7 @@ export function endSession(req, res) {
   const token = req.cookies?.[SESSION_COOKIE];
   if (token) {
     try {
-      const payload = jwt.verify(token, env.jwtSecret, { algorithms: ['HS256'] });
+      const payload = jwt.verify(token, env.jwtSecret, { algorithms: [JWT_ALGORITHM] });
       revokeToken(payload.jti, payload.exp);
     } catch {
       // Already invalid or expired: nothing to revoke.
@@ -53,7 +59,7 @@ export async function requireAuth(req, res, next) {
 
   let payload;
   try {
-    payload = jwt.verify(token, env.jwtSecret, { algorithms: ['HS256'] });
+    payload = jwt.verify(token, env.jwtSecret, { algorithms: [JWT_ALGORITHM] });
   } catch {
     clearSessionCookie(res);
     throw new HttpError(401, 'Your session has expired. Please sign in again.');
@@ -74,7 +80,7 @@ export async function requireAuth(req, res, next) {
   next();
 }
 
-// Use after requireAuth, e.g. router.get('/admin/x', requireAuth, requireRole('admin'), handler).
+// Use after requireAuth, e.g. router.get('/admin/x', requireAuth, requireRole(ROLE.ADMIN), handler).
 export function requireRole(...roles) {
   return (req, res, next) => {
     if (!req.user || !roles.includes(req.user.role)) {

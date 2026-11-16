@@ -1,5 +1,6 @@
 // Reads settings from environment variables (.env) once, checks them, and
 // exports a frozen object. The app refuses to start if the secret is missing or weak.
+import { JWT_SECRET_MIN_LENGTH } from './constants.js';
 
 function list(name, fallback) {
   return (process.env[name] || fallback)
@@ -9,8 +10,8 @@ function list(name, fallback) {
 }
 
 const jwtSecret = process.env.JWT_SECRET;
-if (!jwtSecret || jwtSecret.length < 32) {
-  throw new Error('JWT_SECRET is missing or shorter than 32 characters. Copy .env.example to .env and fill it in.');
+if (!jwtSecret || jwtSecret.length < JWT_SECRET_MIN_LENGTH) {
+  throw new Error(`JWT_SECRET is missing or shorter than ${JWT_SECRET_MIN_LENGTH} characters. Copy .env.example to .env and fill it in.`);
 }
 
 // The database connection string (Supabase/Neon). Without it nothing can be saved.

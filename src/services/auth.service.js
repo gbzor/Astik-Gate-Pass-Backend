@@ -4,7 +4,7 @@
 // Controllers handle HTTP (req, res, cookies) and call these functions.
 // Only services talk to the database (src/db/index.js).
 import bcrypt from 'bcryptjs';
-import { BCRYPT_COST } from '../config/constants.js';
+import { BCRYPT_COST, LOGIN_PORTAL, ROLE, USER_STATUS } from '../config/constants.js';
 import { users } from '../db/index.js';
 import { HttpError } from '../utils/httpError.js';
 
@@ -20,7 +20,7 @@ export async function registerUser(data) {
 
   return users.create({
     role: data.role,
-    status: 'active',
+    status: USER_STATUS.ACTIVE,
     firstName: data.firstName,
     lastName: data.lastName,
     email: data.email,
@@ -35,13 +35,13 @@ export async function registerUser(data) {
 export async function signIn({ email, password, portal, ip }) {
   const user = await users.findByEmail(email);
   const passwordOk = await bcrypt.compare(password, user?.passwordHash ?? DUMMY_HASH);
-  const portalOk = user && (portal === 'admin' ? user.role === 'admin' : user.role !== 'admin');
+  const portalOk = user && (portal === LOGIN_PORTAL.ADMIN ? user.role === ROLE.ADMIN : user.role !== ROLE.ADMIN);
 
   if (!user || !passwordOk || !portalOk) {
     console.warn(`[auth] Failed ${portal} sign-in from ${ip}`);
     throw new HttpError(401, 'Incorrect email or password.');
   }
-  if (user.status !== 'active') {
+  if (user.status !== USER_STATUS.ACTIVE) {
     throw new HttpError(403, 'This account is disabled. Please contact the Security Office.');
   }
   return user;
@@ -51,5 +51,5 @@ export async function signIn({ email, password, portal, ip }) {
 // account no longer exists or is disabled.
 export async function getActiveUser(id) {
   const user = await users.findById(id);
-  return user && user.status === 'active' ? user : null;
+  return user && user.status === USER_STATUS.ACTIVE ? user : null;
 }

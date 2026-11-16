@@ -12,17 +12,18 @@
 //
 // Ownership rule: students and faculty only see their OWN applications. Someone else's
 // application answers "not found" (404), so nobody can probe which IDs exist.
-import { PAGE_SIZE_MAX } from '../config/constants.js';
+import {
+  PAGE_SIZE_MAX, PG_ERROR, ROLE, STICKER_SORT_FIELDS, STICKER_STATUS,
+} from '../config/constants.js';
 import { pool } from '../db/index.js';
 import { HttpError } from '../utils/httpError.js';
-import { likePattern, PG_UNIQUE_VIOLATION } from '../utils/sql.js';
+import { likePattern, sortColumns } from '../utils/sql.js';
 
 const NOT_FOUND = 'Sticker application not found.';
 const VEHICLE_NOT_FOUND = 'Vehicle not found.';
 const VEHICLE_INACTIVE = 'This vehicle is deactivated, so it can\'t get a sticker.';
 const ALREADY_OPEN = 'This vehicle already has a pending or approved sticker application.';
 const STICKER_TAKEN = 'That sticker number is already assigned to another vehicle.';
-const PG_FOREIGN_KEY_VIOLATION = '23503';
 
 // One application, with its vehicle, the applicant's public details and the reviewer's name.
 // Named columns only, so the password hash is never read.
@@ -45,17 +46,17 @@ const LIST_FROM = `
     JOIN vehicles v ON v.id = s.vehicle_id
     JOIN users a ON a.id = s.applicant_id`;
 
-// API sort name -> database column. Only these can be sorted on.
-const SORTABLE = {
+// API sort name (STICKER_SORT_FIELDS in constants.js) -> database column. Only these can be sorted on.
+const SORTABLE = sortColumns(STICKER_SORT_FIELDS, {
   createdAt: 's.created_at',
   reviewedAt: 's.reviewed_at',
   status: 's.status',
   plateNumber: 'v.plate_number',
   stickerNumber: 's.sticker_number',
   expiresAt: 's.expires_at',
-};
+});
 
-const isAdmin = (user) => user.role === 'admin';
+const isAdmin = (user) => user.role === ROLE.ADMIN;
 const iso = (date) => (date ? date.toISOString() : null);
 
 // Database row (snake_case) -> app object (camelCase). Applicant and reviewer details are
@@ -128,8 +129,8 @@ export async function submitApplication(applicant, { vehicleId }) {
     );
     id = rows[0]?.id;
   } catch (err) {
-    if (err.code === PG_UNIQUE_VIOLATION) throw new HttpError(409, ALREADY_OPEN);
-    if (err.code === PG_FOREIGN_KEY_VIOLATION) throw new HttpError(404, VEHICLE_NOT_FOUND); // deleted meanwhile
+    if (err.code === PG_ERROR.UNIQUE_VIOLATION) throw new HttpError(409, ALREADY_OPEN);
+    if (err.code === PG_ERROR.FOREIGN_KEY_VIOLATION) throw new HttpError(404, VEHICLE_NOT_FOUND); // deleted meanwhile
     throw err;
   }
 
@@ -143,7 +144,7 @@ export async function submitApplication(applicant, { vehicleId }) {
 }
 
 // GET /api/sticker-applications/mine: your own applications, newest first.
-// At most PAGE_SIZE_MAX rows (a user has at most 5 vehicles, so this is plenty).
+// At most PAGE_SIZE_MAX rows (a user has at most MAX_VEHICLES_PER_USER vehicles, so this is plenty).
 export async function listOwnApplications(applicantId, { status }) {
   const params = [applicantId];
   const statusSql = status ? `AND s.status = $${params.push(status)}` : '';
@@ -197,6 +198,7 @@ export async function getApplication(actor, id) {
 
 // Shared by approve and reject. The UPDATE only matches a PENDING application, so if two
 // admins review at the same moment, exactly one wins and the other gets 409.
+// Parameters: $1 id, $2 admin id, $3 'pending', then the caller's own from $4.
 async function review(admin, id, { setSql, params, requireActiveVehicle }) {
   const vehicleSql = requireActiveVehicle
     ? 'AND EXISTS (SELECT 1 FROM vehicles v WHERE v.id = s.vehicle_id AND v.is_active)'
@@ -206,13 +208,13 @@ async function review(admin, id, { setSql, params, requireActiveVehicle }) {
     const { rowCount } = await pool.query(
       `UPDATE campus_stickers s
           SET ${setSql}, reviewed_by = $2, reviewed_at = now()
-        WHERE s.id = $1 AND s.status = 'pending' ${vehicleSql}`,
-      [id, admin.id, ...params],
+        WHERE s.id = $1 AND s.status = $3 ${vehicleSql}`,
+      [id, admin.id, STICKER_STATUS.PENDING, ...params],
     );
     updated = rowCount > 0;
   } catch (err) {
-    if (err.code === PG_UNIQUE_VIOLATION) throw new HttpError(409, STICKER_TAKEN);
-    if (err.code === PG_FOREIGN_KEY_VIOLATION) {
+    if (err.code === PG_ERROR.UNIQUE_VIOLATION) throw new HttpError(409, STICKER_TAKEN);
+    if (err.code === PG_ERROR.FOREIGN_KEY_VIOLATION) {
       // reviewed_by must point at admin_accounts; an admin without that row can't review.
       console.error(`[stickers] admin ${admin.id} has no admin_accounts row; review refused.`);
       throw new HttpError(403, 'Your admin account isn\'t set up to review applications yet.');
@@ -228,7 +230,7 @@ async function review(admin, id, { setSql, params, requireActiveVehicle }) {
       [id],
     );
     if (!rows[0]) throw new HttpError(404, NOT_FOUND);
-    if (rows[0].status !== 'pending') throw new HttpError(409, `This application was already ${rows[0].status}.`);
+    if (rows[0].status !== STICKER_STATUS.PENDING) throw new HttpError(409, `This application was already ${rows[0].status}.`);
     throw new HttpError(409, VEHICLE_INACTIVE);
   }
   return getApplication(admin, id);
@@ -238,8 +240,8 @@ async function review(admin, id, { setSql, params, requireActiveVehicle }) {
 // The database requires a sticker number and an expiry date on every approved sticker.
 export function approveApplication(admin, id, { stickerNumber, expiresAt }) {
   return review(admin, id, {
-    setSql: 'status = \'approved\', sticker_number = $3, expires_at = $4, rejection_reason = NULL',
-    params: [stickerNumber, expiresAt],
+    setSql: 'status = $4, sticker_number = $5, expires_at = $6, rejection_reason = NULL',
+    params: [STICKER_STATUS.APPROVED, stickerNumber, expiresAt],
     requireActiveVehicle: true,
   });
 }
@@ -247,8 +249,8 @@ export function approveApplication(admin, id, { stickerNumber, expiresAt }) {
 // PATCH /api/sticker-applications/:id/reject (admin): the reason is shown to the applicant.
 export function rejectApplication(admin, id, { reason }) {
   return review(admin, id, {
-    setSql: 'status = \'rejected\', rejection_reason = $3, sticker_number = NULL, expires_at = NULL',
-    params: [reason],
+    setSql: 'status = $4, rejection_reason = $5, sticker_number = NULL, expires_at = NULL',
+    params: [STICKER_STATUS.REJECTED, reason],
     requireActiveVehicle: false,
   });
 }
