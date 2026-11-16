@@ -144,3 +144,20 @@ export const PG_ERROR = Object.freeze({
 // Deleting a row other tables still point at. Which code Postgres uses depends on the
 // foreign key's ON DELETE rule: RESTRICT gives 23001, NO ACTION gives 23503.
 export const PG_STILL_REFERENCED = Object.freeze([PG_ERROR.RESTRICT_VIOLATION, PG_ERROR.FOREIGN_KEY_VIOLATION]);
+
+// ─── Notifications ──────────────────────────────────────────────────────────
+
+// SMS providers supported by the notification service.
+export const SMS_PROVIDER = Object.freeze({
+  CONSOLE: 'console',
+  TWILIO: 'twilio',
+  ANDROID_GATEWAY: 'android-gateway',
+});
+export const SMS_PROVIDERS = Object.freeze(Object.values(SMS_PROVIDER));
+
+// Standard single-segment GSM text character limit.
+export const SMS_MAX_LENGTH = 160;
+
+// Philippine mobile number format (E.164, schema.sql: VARCHAR(13)).
+export const PH_MOBILE_PATTERN = /^\+639\d{9}$/;
+
