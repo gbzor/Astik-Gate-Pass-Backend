@@ -1,6 +1,7 @@
 // Sends emails using Nodemailer via SMTP (e.g. Brevo or Gmail App Password).
-// If SMTP_HOST is empty, it prints the email to the console for free local development.
+// If SMTP_HOST is empty, it logs delivery info to the console for free local development.
 import nodemailer from 'nodemailer';
+import { SMS_PROVIDER } from '../config/constants.js';
 import { env } from '../config/env.js';
 
 let transporter = null;
@@ -41,15 +42,19 @@ export async function sendEmail({ to, subject, text, html }) {
 
   const maskedRecipient = maskEmail(to);
 
-  // Free local development mode: prints to console if SMTP is not configured.
+  // Free local development mode: logs to console if SMTP is not configured.
+  // Privacy: only logs masked recipient, subject and length unless DEBUG_NOTIFICATIONS=true.
   if (!env.smtp.host) {
     console.log(`[email:console] To: ${maskedRecipient}`);
     console.log(`[email:console] Subject: ${subject}`);
-    console.log(`[email:console] Text: ${text}`);
-    if (html) {
-      console.log(`[email:console] HTML preview: ${html.length} characters`);
+    console.log(`[email:console] Length: ${text?.length || 0} characters`);
+    if (process.env.DEBUG_NOTIFICATIONS === 'true') {
+      console.log(`[email:console] Text: ${text}`);
+      if (html) {
+        console.log(`[email:console] HTML: ${html}`);
+      }
     }
-    return { success: true, mode: 'console' };
+    return { success: true, mode: SMS_PROVIDER.CONSOLE };
   }
 
   // Real SMTP delivery.

@@ -11,13 +11,14 @@ import { sortColumns } from '../src/utils/sql.js';
 
 const SRC = fileURLToPath(new URL('../src', import.meta.url));
 
-// Folders written by this team. src/db/ and the SMS/email services belong to other developers.
+// Folders written by this team. src/db/ and database.service belong to other developers.
 const CHECKED = ['routes/', 'controllers/', 'middleware/', 'validators/', 'utils/', 'services/', 'app.js', 'server.js'];
-const OTHER_TEAMS = ['services/sms.service.js', 'services/email.service.js', 'services/database.service.js'];
+const OTHER_TEAMS = ['services/database.service.js'];
 
 // Fixed values that must come from constants.js, never typed as '...' text.
 const FIXED = [
   ...C.ROLES, ...C.USER_STATUSES, ...C.STICKER_STATUSES, ...C.VEHICLE_TYPES,
+  ...C.SMS_PROVIDERS,
   C.SESSION_COOKIE_NAME, C.JWT_ALGORITHM, ...Object.values(C.PG_ERROR),
 ];
 
