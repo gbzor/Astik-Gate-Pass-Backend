@@ -55,6 +55,11 @@ export const SCHOOL_ID_MIN_LENGTH = 4;
 export const SCHOOL_ID_MAX_LENGTH = 20;
 export const SCHOOL_ID_PATTERN = /^[A-Z0-9-]+$/;
 
+// The first admin account, created at startup from SEED_ADMIN_EMAIL / SEED_ADMIN_PASSWORD in .env
+// (see src/db/seed.js). Its password must be at least this long, and it gets this fixed ID.
+export const SEED_ADMIN_PASSWORD_MIN_LENGTH = 12;
+export const SEED_ADMIN_SCHOOL_ID = 'ADMIN-0001';
+
 // ─── Vehicles ───────────────────────────────────────────────────────────────────
 
 // How many vehicles one student or faculty member may register (limits spam/abuse).
@@ -145,19 +150,12 @@ export const PG_ERROR = Object.freeze({
 // foreign key's ON DELETE rule: RESTRICT gives 23001, NO ACTION gives 23503.
 export const PG_STILL_REFERENCED = Object.freeze([PG_ERROR.RESTRICT_VIOLATION, PG_ERROR.FOREIGN_KEY_VIOLATION]);
 
-// ─── Notifications ──────────────────────────────────────────────────────────
+// ─── Database ───────────────────────────────────────────────────────────────────
 
-// SMS providers supported by the notification service.
-export const SMS_PROVIDER = Object.freeze({
-  CONSOLE: 'console',
-  TWILIO: 'twilio',
-  ANDROID_GATEWAY: 'android-gateway',
-});
-export const SMS_PROVIDERS = Object.freeze(Object.values(SMS_PROVIDER));
+// Most connections the database pool opens at once (see src/db/index.js). Keep it small: free
+// Supabase and Neon plans only allow a limited number of connections in total.
+export const DB_POOL_MAX_CONNECTIONS = 10;
 
-// Standard single-segment GSM text character limit.
-export const SMS_MAX_LENGTH = 160;
-
-// Philippine mobile number format (E.164, schema.sql: VARCHAR(13)).
-export const PH_MOBILE_PATTERN = /^\+639\d{9}$/;
-
+// What an ID must look like before it is sent to a uuid column. Anything else can't match a row,
+// and Postgres would answer with an error instead of "not found".
+export const UUID_PATTERN = /^[0-9a-f-]{36}$/i;
