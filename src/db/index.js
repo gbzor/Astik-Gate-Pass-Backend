@@ -8,6 +8,14 @@
 // ---------------------------------------------------------------------------
 import pg from 'pg';
 import { env } from '../config/env.js';
+import {
+  DB_POOL_MAX_CONNECTIONS,
+  PG_ERROR,
+  PG_STILL_REFERENCED,
+  ROLE,
+  USER_STATUS,
+  UUID_PATTERN,
+} from '../config/constants.js';
 import { HttpError } from '../utils/httpError.js';
 
 // Hosted databases (Supabase/Neon) require SSL; a local one on this machine does not.
@@ -16,7 +24,7 @@ const isLocal = ['localhost', '127.0.0.1'].includes(new URL(env.databaseUrl).hos
 export const pool = new pg.Pool({
   connectionString: env.databaseUrl,
   ssl: isLocal ? false : { rejectUnauthorized: true },
-  max: 10,
+  max: DB_POOL_MAX_CONNECTIONS,
 });
 // An idle connection dropping must not crash the whole server.
 pool.on('error', (err) => console.error('[db] idle client error:', err.message));
@@ -51,17 +59,17 @@ const UPDATABLE = {
   contactNumber: 'contact_number',
 };
 
-const isUuid = (id) => /^[0-9a-f-]{36}$/i.test(String(id));
+const isUuid = (id) => UUID_PATTERN.test(String(id));
 
 // Postgres error 23505 = unique violation (duplicate email or school ID).
-const isDuplicate = (err) => err.code === '23505';
+const isDuplicate = (err) => err.code === PG_ERROR.UNIQUE_VIOLATION;
 const DUPLICATE_MESSAGE = 'An account with this email or ID number already exists.';
 
 // --- users ------------------------------------------------------------------
 export const users = {
   async findById(id) {
     // A malformed id can't match a uuid column; return null instead of a database error.
-    if (!/^[0-9a-f-]{36}$/i.test(String(id))) return null;
+    if (!isUuid(id)) return null;
     const { rows } = await pool.query('SELECT * FROM users WHERE id = $1', [id]);
     return toUser(rows[0]);
   },
@@ -84,7 +92,7 @@ export const users = {
          RETURNING *`,
         [
           data.role,
-          data.status ?? 'active',
+          data.status ?? USER_STATUS.ACTIVE,
           data.firstName,
           data.lastName,
           data.email.toLowerCase(),
@@ -94,7 +102,7 @@ export const users = {
         ],
       );
       // Sticker approvals point at admin_accounts, so every admin needs a row there.
-      if (rows[0].role === 'admin') {
+      if (rows[0].role === ROLE.ADMIN) {
         await client.query('INSERT INTO admin_accounts (user_id) VALUES ($1)', [rows[0].id]);
       }
       await client.query('COMMIT');
@@ -108,7 +116,7 @@ export const users = {
     }
   },
   async update(id, patch) {
-    if (!/^[0-9a-f-]{36}$/i.test(String(id))) return null;
+    if (!isUuid(id)) return null;
     const entries = Object.entries(patch).filter(([key]) => key in UPDATABLE);
     if (entries.length === 0) return users.findById(id);
     const values = entries.map(([key, value]) => {
@@ -211,7 +219,7 @@ export const vehicles = {
       const { rowCount } = await pool.query('DELETE FROM vehicles WHERE id = $1', [id]);
       return rowCount > 0;
     } catch (err) {
-      if (err.code === '23503' || err.code === '23001') throw new HttpError(409, VEHICLE_HAS_HISTORY);
+      if (PG_STILL_REFERENCED.includes(err.code)) throw new HttpError(409, VEHICLE_HAS_HISTORY);
       throw err;
     }
   },

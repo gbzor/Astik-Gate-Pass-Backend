@@ -3,6 +3,9 @@
 -- If an older version of this file was already run, run reset.sql first
 -- (CREATE TABLE IF NOT EXISTS silently skips tables that already exist).
 
+-- NOTE: values copied from src/config/constants.js are marked "constants.js: NAME" below. SQL can't
+-- import JavaScript, so when you change one of those constants, change the matching line here too.
+
 CREATE OR REPLACE FUNCTION set_updated_at() RETURNS trigger AS $$
 BEGIN
   NEW.updated_at = now();
@@ -13,12 +16,12 @@ $$ LANGUAGE plpgsql;
 -- 1. USERS ------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS users (
   id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  role            VARCHAR(10)  NOT NULL CHECK (role IN ('student', 'faculty', 'admin')),
-  status          VARCHAR(10)  NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'disabled')),
-  first_name      VARCHAR(60)  NOT NULL CHECK (btrim(first_name) <> ''),
-  last_name       VARCHAR(60)  NOT NULL CHECK (btrim(last_name) <> ''),
-  email           VARCHAR(254) NOT NULL UNIQUE,
-  school_id       VARCHAR(20)  NOT NULL UNIQUE,
+  role            VARCHAR(10)  NOT NULL CHECK (role IN ('student', 'faculty', 'admin')), -- constants.js: ROLES
+  status          VARCHAR(10)  NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'disabled')), -- constants.js: USER_STATUSES (default = USER_STATUS.ACTIVE)
+  first_name      VARCHAR(60)  NOT NULL CHECK (btrim(first_name) <> ''), -- constants.js: NAME_MAX_LENGTH
+  last_name       VARCHAR(60)  NOT NULL CHECK (btrim(last_name) <> ''), -- constants.js: NAME_MAX_LENGTH
+  email           VARCHAR(254) NOT NULL UNIQUE, -- constants.js: EMAIL_MAX_LENGTH
+  school_id       VARCHAR(20)  NOT NULL UNIQUE, -- constants.js: SCHOOL_ID_MAX_LENGTH
   password_hash   TEXT         NOT NULL,
   -- Agreed with the SMS developer: +639XXXXXXXXX (E.164, PH mobile). Nullable.
   contact_number  VARCHAR(13)  CHECK (contact_number ~ '^\+639[0-9]{9}$'),
@@ -36,7 +39,7 @@ CREATE TABLE IF NOT EXISTS users (
 -- Extra details for admins. Login stays in users (role = 'admin').
 CREATE TABLE IF NOT EXISTS admin_accounts (
   user_id     UUID PRIMARY KEY,
-  role        VARCHAR(10) NOT NULL DEFAULT 'admin' CHECK (role = 'admin'),
+  role        VARCHAR(10) NOT NULL DEFAULT 'admin' CHECK (role = 'admin'), -- constants.js: ROLE.ADMIN
   position    VARCHAR(80),
   is_super    BOOLEAN     NOT NULL DEFAULT FALSE,
   created_by  UUID REFERENCES admin_accounts(user_id) ON DELETE SET NULL,
@@ -50,17 +53,17 @@ CREATE TABLE IF NOT EXISTS admin_accounts (
 CREATE TABLE IF NOT EXISTS vehicles (
   id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   owner_id      UUID        NOT NULL REFERENCES users(id) ON DELETE RESTRICT,
-  plate_number  VARCHAR(15) NOT NULL UNIQUE,
-  type          VARCHAR(15) NOT NULL CHECK (type IN ('car', 'motorcycle', 'tricycle', 'van', 'other')),
-  make          VARCHAR(40),
-  model         VARCHAR(40),
-  color         VARCHAR(30),
+  plate_number  VARCHAR(15) NOT NULL UNIQUE, -- constants.js: PLATE_NUMBER_MAX_LENGTH
+  type          VARCHAR(15) NOT NULL CHECK (type IN ('car', 'motorcycle', 'tricycle', 'van', 'other')), -- constants.js: VEHICLE_TYPES
+  make          VARCHAR(40), -- constants.js: VEHICLE_MAKE_MAX_LENGTH
+  model         VARCHAR(40), -- constants.js: VEHICLE_MODEL_MAX_LENGTH
+  color         VARCHAR(30), -- constants.js: VEHICLE_COLOR_MAX_LENGTH
   -- FALSE = deactivated: kept for sticker/parking history but no longer usable.
   is_active     BOOLEAN     NOT NULL DEFAULT TRUE,
   created_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
   updated_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
   CONSTRAINT vehicles_plate_uppercase CHECK (plate_number = upper(plate_number)),
-  CONSTRAINT vehicles_plate_format    CHECK (plate_number ~ '^[A-Z0-9 -]{3,15}$'),
+  CONSTRAINT vehicles_plate_format    CHECK (plate_number ~ '^[A-Z0-9 -]{3,15}$'), -- constants.js: PLATE_NUMBER_PATTERN, PLATE_NUMBER_MIN_LENGTH, PLATE_NUMBER_MAX_LENGTH
   -- Lets child tables prove "this vehicle belongs to this user".
   CONSTRAINT vehicles_id_owner_key UNIQUE (id, owner_id)
 );
@@ -83,12 +86,14 @@ CREATE TABLE IF NOT EXISTS parking_areas (
 CREATE UNIQUE INDEX IF NOT EXISTS uq_parking_areas_name ON parking_areas(lower(name));
 
 -- 5. CAMPUS STICKERS  (vehicles 1 --- * stickers, approved by admin_accounts) -
+-- constants.js: status values = STICKER_STATUSES (the CHECK on status below);
+-- sticker_number VARCHAR(20) = STICKER_NUMBER_MAX_LENGTH.
 CREATE TABLE IF NOT EXISTS campus_stickers (
   id                UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   vehicle_id        UUID NOT NULL,
   applicant_id      UUID NOT NULL,
   status            VARCHAR(10) NOT NULL DEFAULT 'pending'
-                    CHECK (status IN ('pending', 'approved', 'rejected', 'expired')),
+                    CHECK (status IN ('pending', 'approved', 'rejected')),
   sticker_number    VARCHAR(20) UNIQUE,
   expires_at        TIMESTAMPTZ,
   reviewed_by       UUID REFERENCES admin_accounts(user_id) ON DELETE RESTRICT,
@@ -120,138 +125,6 @@ CREATE UNIQUE INDEX IF NOT EXISTS uq_stickers_one_open_per_vehicle
 CREATE INDEX IF NOT EXISTS idx_stickers_applicant ON campus_stickers(applicant_id);
 CREATE INDEX IF NOT EXISTS idx_stickers_status    ON campus_stickers(status);
 CREATE INDEX IF NOT EXISTS idx_stickers_reviewer  ON campus_stickers(reviewed_by);
-
--- 5b. STICKER LIFECYCLE: expiry, history, automatic numbering ---------------
--- Status flow:  pending -> approved -> expired      pending -> rejected
--- 'expired' is a real status (set by expire_stickers() or automatically, see below), so the
--- partial index above, which only covers pending/approved, stops blocking the vehicle.
-
--- Databases created before 'expired' existed still have the old 3-value CHECK; widen it once.
-DO $$
-BEGIN
-  IF EXISTS (SELECT 1 FROM pg_constraint
-              WHERE conname = 'campus_stickers_status_check'
-                AND pg_get_constraintdef(oid) NOT LIKE '%expired%') THEN
-    ALTER TABLE campus_stickers DROP CONSTRAINT campus_stickers_status_check;
-    ALTER TABLE campus_stickers ADD CONSTRAINT campus_stickers_status_check
-      CHECK (status IN ('pending', 'approved', 'rejected', 'expired'));
-  END IF;
-END $$;
-
--- Audit trail of every status change. Insert-only: rows are never changed or deleted.
--- changed_by is NULL when nobody in particular did it (applicant submitting, automatic expiry).
-CREATE TABLE IF NOT EXISTS sticker_application_history (
-  id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  application_id  UUID        NOT NULL REFERENCES campus_stickers(id) ON DELETE RESTRICT,
-  from_status     VARCHAR(10) CHECK (from_status IN ('pending', 'approved', 'rejected', 'expired')),
-  to_status       VARCHAR(10) NOT NULL CHECK (to_status IN ('pending', 'approved', 'rejected', 'expired')),
-  changed_by      UUID REFERENCES admin_accounts(user_id) ON DELETE RESTRICT,
-  reason          TEXT,
-  changed_at      TIMESTAMPTZ NOT NULL DEFAULT now()
-);
-CREATE INDEX IF NOT EXISTS idx_sticker_history_application
-  ON sticker_application_history(application_id, changed_at);
-
-CREATE OR REPLACE FUNCTION forbid_history_changes() RETURNS trigger AS $$
-BEGIN
-  RAISE EXCEPTION 'sticker_application_history is insert-only';
-END;
-$$ LANGUAGE plpgsql;
-
--- One counter row per year. Taking the row lock inside next_sticker_number() makes
--- concurrent approvals queue up, so two of them can never receive the same number.
-CREATE TABLE IF NOT EXISTS sticker_number_counters (
-  year         INTEGER PRIMARY KEY CHECK (year BETWEEN 2000 AND 9999),
-  last_number  INTEGER NOT NULL CHECK (last_number >= 0)
-);
-
--- Returns the next number like '2026-0001' (year restarts the count). The year is the
--- campus year (Asia/Manila). Numbers already used by hand-typed stickers are skipped.
-CREATE OR REPLACE FUNCTION next_sticker_number(p_year INTEGER DEFAULT NULL) RETURNS TEXT AS $$
-DECLARE
-  y INTEGER := COALESCE(p_year, extract(year FROM (now() AT TIME ZONE 'Asia/Manila'))::INTEGER);
-  n INTEGER;
-  candidate TEXT;
-BEGIN
-  LOOP
-    INSERT INTO sticker_number_counters (year, last_number) VALUES (y, 1)
-    ON CONFLICT (year) DO UPDATE SET last_number = sticker_number_counters.last_number + 1
-    RETURNING last_number INTO n;
-    -- lpad would cut a 5-digit number short, so only pad below 10000.
-    candidate := y::TEXT || '-' || CASE WHEN n < 10000 THEN lpad(n::TEXT, 4, '0') ELSE n::TEXT END;
-    EXIT WHEN NOT EXISTS (SELECT 1 FROM campus_stickers WHERE sticker_number = candidate);
-  END LOOP;
-  RETURN candidate;
-END;
-$$ LANGUAGE plpgsql;
-
--- Turns every APPROVED sticker whose expires_at has passed into 'expired'. Safe to run any
--- time, as often as you like; returns how many it changed. Run it from a scheduled job
--- (for example at server start and hourly): SELECT expire_stickers();
-CREATE OR REPLACE FUNCTION expire_stickers() RETURNS INTEGER AS $$
-DECLARE
-  changed INTEGER;
-BEGIN
-  UPDATE campus_stickers SET status = 'expired'
-   WHERE status = 'approved' AND expires_at <= now();
-  GET DIAGNOSTICS changed = ROW_COUNT;
-  RETURN changed;
-END;
-$$ LANGUAGE plpgsql;
-
--- Before a NEW application is saved, expire this vehicle's lapsed sticker. This is what lets
--- the owner reapply right away even if the scheduled job hasn't run yet.
-CREATE OR REPLACE FUNCTION expire_vehicle_stickers_before_insert() RETURNS trigger AS $$
-BEGIN
-  UPDATE campus_stickers SET status = 'expired'
-   WHERE vehicle_id = NEW.vehicle_id AND status = 'approved' AND expires_at <= now();
-  RETURN NEW;
-END;
-$$ LANGUAGE plpgsql;
-
--- Approving without a number (sticker_number NULL) assigns the next one automatically.
-CREATE OR REPLACE FUNCTION assign_sticker_number() RETURNS trigger AS $$
-BEGIN
-  IF NEW.status = 'approved' AND NEW.sticker_number IS NULL THEN
-    NEW.sticker_number := next_sticker_number();
-  END IF;
-  RETURN NEW;
-END;
-$$ LANGUAGE plpgsql;
-
--- Writes the history row for every new application and every status change.
-CREATE OR REPLACE FUNCTION log_sticker_status_change() RETURNS trigger AS $$
-BEGIN
-  IF TG_OP = 'INSERT' THEN
-    INSERT INTO sticker_application_history (application_id, from_status, to_status)
-    VALUES (NEW.id, NULL, NEW.status);
-  ELSIF OLD.status IS DISTINCT FROM NEW.status THEN
-    INSERT INTO sticker_application_history (application_id, from_status, to_status, changed_by, reason)
-    VALUES (
-      NEW.id, OLD.status, NEW.status,
-      CASE WHEN NEW.status IN ('approved', 'rejected') THEN NEW.reviewed_by END,
-      CASE WHEN NEW.status = 'rejected' THEN NEW.rejection_reason END
-    );
-  END IF;
-  RETURN NULL;
-END;
-$$ LANGUAGE plpgsql;
-
-DROP TRIGGER IF EXISTS trg_stickers_expire_before_insert ON campus_stickers;
-CREATE TRIGGER trg_stickers_expire_before_insert BEFORE INSERT ON campus_stickers
-  FOR EACH ROW EXECUTE FUNCTION expire_vehicle_stickers_before_insert();
-DROP TRIGGER IF EXISTS trg_stickers_assign_number ON campus_stickers;
-CREATE TRIGGER trg_stickers_assign_number BEFORE UPDATE ON campus_stickers
-  FOR EACH ROW EXECUTE FUNCTION assign_sticker_number();
-DROP TRIGGER IF EXISTS trg_stickers_log_insert ON campus_stickers;
-CREATE TRIGGER trg_stickers_log_insert AFTER INSERT ON campus_stickers
-  FOR EACH ROW EXECUTE FUNCTION log_sticker_status_change();
-DROP TRIGGER IF EXISTS trg_stickers_log_update ON campus_stickers;
-CREATE TRIGGER trg_stickers_log_update AFTER UPDATE OF status ON campus_stickers
-  FOR EACH ROW EXECUTE FUNCTION log_sticker_status_change();
-DROP TRIGGER IF EXISTS trg_sticker_history_insert_only ON sticker_application_history;
-CREATE TRIGGER trg_sticker_history_insert_only BEFORE UPDATE OR DELETE ON sticker_application_history
-  FOR EACH ROW EXECUTE FUNCTION forbid_history_changes();
 
 -- 6. PARKING RECORDS  (-> users, vehicles, parking_areas, stickers) ----------
 -- exited_at IS NULL means the vehicle is still parked.
