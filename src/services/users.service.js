@@ -40,7 +40,7 @@ export async function getUserDetails(id) {
 
 // GET /api/users (admin): search, filter, sort and page through user records.
 // Selects named columns only, so the password hash is never read.
-export async function listUsers({ role, status, q, sort, order, page, limit }) {
+export async function listUsers({ role, status, q, from, to, sort, order, page, limit }) {
   const params = [];
   const where = [];
   const add = (value) => {
@@ -50,6 +50,8 @@ export async function listUsers({ role, status, q, sort, order, page, limit }) {
 
   if (role) where.push(`u.role = ${add(role)}`);
   if (status) where.push(`u.status = ${add(status)}`);
+  if (from) where.push(`u.created_at >= ${add(from)}`);
+  if (to) where.push(`u.created_at <= ${add(to)}`);
   if (q) {
     const p = add(likePattern(q));
     where.push(`(u.first_name ILIKE ${p} OR u.last_name ILIKE ${p}

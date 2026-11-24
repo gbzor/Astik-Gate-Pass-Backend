@@ -12,7 +12,9 @@ import {
   VEHICLE_SORT_FIELDS,
   VEHICLE_TYPES,
 } from '../config/constants.js';
-import { order, pagination, searchText, sortBy } from './common.schemas.js';
+import {
+  checkDateRange, dateRange, order, pagination, searchText, sortBy,
+} from './common.schemas.js';
 
 // Plate numbers are stored in one standard form ("abc  1234" becomes "ABC 1234"),
 // so the same plate can't be registered twice with different spacing or case.
@@ -55,13 +57,18 @@ export const updateVehicleSchema = z.object({
   message: 'Send at least one field to update.',
 });
 
-// GET /api/vehicles?type=car&ownerRole=student&q=abc&page=1&limit=20&sort=plateNumber&order=asc
+// GET /api/vehicles?type=car&ownerRole=student&isActive=true&q=abc&from=2026-08-01&page=1&limit=20&sort=plateNumber&order=asc
+// from/to filter by registration date.
 export const listVehiclesQuery = z.object({
   type: type.optional(),
   ownerRole: z.enum(MEMBER_ROLES).optional(),
   ownerId: z.uuid('Invalid owner ID.').optional(),
+  // Query values are text, so only the exact words "true" and "false" are accepted.
+  isActive: z.enum(['true', 'false'], { error: 'isActive must be true or false.' })
+    .transform((v) => v === 'true').optional(),
   q: searchText,
+  ...dateRange,
   sort: sortBy(VEHICLE_SORT_FIELDS),
   order,
   ...pagination,
-});
+}).superRefine(checkDateRange);

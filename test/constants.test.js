@@ -17,7 +17,7 @@ const OTHER_TEAMS = ['services/database.service.js'];
 
 // Fixed values that must come from constants.js, never typed as '...' text.
 const FIXED = [
-  ...C.ROLES, ...C.USER_STATUSES, ...C.STICKER_STATUSES, ...C.VEHICLE_TYPES,
+  ...C.ROLES, ...C.USER_STATUSES, ...C.STICKER_STATUSES, ...C.VEHICLE_TYPES, ...C.ACTIVITY_TYPES,
   ...C.SMS_PROVIDERS,
   C.SESSION_COOKIE_NAME, C.JWT_ALGORITHM, ...Object.values(C.PG_ERROR),
 ];

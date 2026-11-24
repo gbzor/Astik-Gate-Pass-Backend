@@ -134,7 +134,7 @@ export async function listOwnVehicles(ownerId) {
 }
 
 // GET /api/vehicles (admin): search, filter, sort and page through every vehicle.
-export async function listVehicles({ type, ownerRole, ownerId, q, sort, order, page, limit }) {
+export async function listVehicles({ type, ownerRole, ownerId, isActive, q, from, to, sort, order, page, limit }) {
   const params = [];
   const where = [];
   const add = (value) => {
@@ -145,6 +145,9 @@ export async function listVehicles({ type, ownerRole, ownerId, q, sort, order, p
   if (type) where.push(`v.type = ${add(type)}`);
   if (ownerRole) where.push(`u.role = ${add(ownerRole)}`);
   if (ownerId) where.push(`v.owner_id = ${add(ownerId)}`);
+  if (isActive !== undefined) where.push(`v.is_active = ${add(isActive)}`);
+  if (from) where.push(`v.created_at >= ${add(from)}`);
+  if (to) where.push(`v.created_at <= ${add(to)}`);
   if (q) {
     const p = add(likePattern(q));
     where.push(`(v.plate_number ILIKE ${p} OR v.make ILIKE ${p} OR v.model ILIKE ${p} OR v.color ILIKE ${p}

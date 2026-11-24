@@ -116,6 +116,28 @@ export const VEHICLE_SORT_FIELDS = Object.freeze(['createdAt', 'plateNumber', 't
 export const STICKER_SORT_FIELDS = Object.freeze(['createdAt', 'reviewedAt', 'status', 'plateNumber', 'stickerNumber', 'expiresAt']);
 export const SORT_FIELD_DEFAULT = 'createdAt';
 
+// ?from=2026-08-01&to=2026-12-31 on admin lists: the widest date range one request may ask for
+// (about 5 school years), so a typo like year 20266 is refused instead of searched.
+export const DATE_RANGE_MAX_DAYS = 1830;
+
+// ─── Admin dashboard and activity feed ──────────────────────────────────────────
+
+// Dashboard counts: "new" means created within this many days; "expiring soon" means an
+// approved sticker that runs out within this many days.
+export const DASHBOARD_NEW_WITHIN_DAYS = 7;
+export const DASHBOARD_EXPIRING_WITHIN_DAYS = 30;
+
+// What the recent activities feed (GET /api/admin/activities) reports. Each one is read from
+// the time stamps the main tables already keep, so no extra table is needed.
+export const ACTIVITY_TYPE = Object.freeze({
+  USER_REGISTERED: 'user_registered', // a student or faculty member signed up
+  VEHICLE_REGISTERED: 'vehicle_registered', // a vehicle was added
+  STICKER_SUBMITTED: 'sticker_submitted', // a sticker application was sent
+  STICKER_APPROVED: 'sticker_approved', // an admin approved it
+  STICKER_REJECTED: 'sticker_rejected', // an admin rejected it
+});
+export const ACTIVITY_TYPES = Object.freeze(Object.values(ACTIVITY_TYPE));
+
 // ─── HTTP and security ──────────────────────────────────────────────────────────
 
 // Largest JSON request body accepted.
