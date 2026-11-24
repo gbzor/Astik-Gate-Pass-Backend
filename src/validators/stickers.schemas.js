@@ -12,7 +12,9 @@ import {
   STICKER_SORT_FIELDS,
   STICKER_STATUSES,
 } from '../config/constants.js';
-import { order, pagination, searchText, sortBy } from './common.schemas.js';
+import {
+  checkDateRange, dateRange, order, pagination, searchText, sortBy,
+} from './common.schemas.js';
 
 const status = z.enum(STICKER_STATUSES, { error: `Status must be one of: ${STICKER_STATUSES.join(', ')}.` });
 
@@ -61,14 +63,16 @@ export const listMyApplicationsQuery = z.object({
   status: status.optional(),
 });
 
-// GET /api/sticker-applications?status=pending&q=abc&page=1&limit=20&sort=createdAt&order=desc (admin)
+// GET /api/sticker-applications?status=pending&q=abc&from=2026-08-01&page=1&limit=20&sort=createdAt&order=desc (admin)
+// from/to filter by the date the application was sent.
 export const listApplicationsQuery = z.object({
   status: status.optional(),
   applicantRole: z.enum(MEMBER_ROLES).optional(),
   applicantId: z.uuid('Invalid applicant ID.').optional(),
   vehicleId: z.uuid('Invalid vehicle ID.').optional(),
   q: searchText,
+  ...dateRange,
   sort: sortBy(STICKER_SORT_FIELDS),
   order,
   ...pagination,
-});
+}).superRefine(checkDateRange);

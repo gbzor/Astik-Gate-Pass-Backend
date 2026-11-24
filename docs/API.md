@@ -119,6 +119,8 @@ Admin lists (`GET /users`, `GET /vehicles`, `GET /sticker-applications`) accept 
 | `sort` | `createdAt` | See each endpoint for allowed values |
 | `order` | `desc` | `asc` or `desc` |
 | `q` | none | Search text, up to 100 characters (letters, numbers, spaces, `@ . ' _ -`) |
+| `from` | none | Created on or after this day, e.g. `2026-08-01` (campus time, UTC+8) |
+| `to` | none | Created on or before this day, e.g. `2026-08-31`. Must not be before `from`; range at most 1830 days |
 
 Every list response includes:
 ```json
@@ -188,7 +190,7 @@ Your own vehicles, newest first. → `200 { "vehicles": [ ...vehicle ] }`
 
 ### `GET /vehicles` 🔒 admin
 All vehicles, with owner details. Filters: `type`, `ownerRole` (`student`, `faculty`), `ownerId`,
-`q` (plate, make, model, color, owner name or ID number). Sort: `createdAt`, `plateNumber`, `type`, `make`.
+`isActive` (`true` or `false`), `q` (plate, make, model, color, owner name or ID number). Sort: `createdAt`, `plateNumber`, `type`, `make`.
 → `200 { "vehicles": [ ...vehicle with owner ], "pagination": { … } }`
 
 ### `GET /vehicles/:id` 🔒 owner or admin
@@ -318,6 +320,76 @@ Rejects a **pending** application. The reason is shown to the applicant, so writ
   `reviewedAt` is `null` while pending. Dates are in UTC: show them with
   `new Date(expiresAt).toLocaleDateString('en-PH')`.
 - Show `rejectionReason` as **text** (`textContent`), never as HTML.
+
+---
+
+## Admin dashboard
+
+Both routes are admin only (`401` signed out, `403` for students and faculty).
+The record lists themselves are `GET /users`, `GET /vehicles` and `GET /sticker-applications` above.
+
+### `GET /admin/dashboard` 🔒 admin
+Every count the dashboard cards need, in one call. Every key is always present (zero if there are no rows).
+→ `200`
+```json
+{
+  "stats": {
+    "users": {
+      "total": 152, "newRecently": 9,
+      "byRole": { "student": 120, "faculty": 31, "admin": 1 },
+      "byStatus": { "active": 150, "disabled": 2 }
+    },
+    "vehicles": {
+      "total": 140, "active": 136, "deactivated": 4, "newRecently": 6,
+      "byType": { "car": 90, "motorcycle": 45, "tricycle": 0, "van": 4, "other": 1 }
+    },
+    "stickerApplications": {
+      "total": 130, "byStatus": { "pending": 12, "approved": 110, "rejected": 8 },
+      "validStickers": 104, "expiringSoon": 7, "expiredStickers": 6
+    },
+    "parking": { "activeAreas": 3, "totalCapacity": 250, "currentlyParked": 87, "availableSlots": 163 },
+    "settings": { "newWithinDays": 7, "expiringWithinDays": 30 },
+    "generatedAt": "2026-11-24T03:15:00.000Z"
+  }
+}
+```
+- `newRecently`: created in the last `settings.newWithinDays` days.
+- `validStickers`: approved and not yet expired. `expiringSoon`: valid, but runs out within
+  `settings.expiringWithinDays` days. `expiredStickers`: approved, but the expiry date has passed.
+
+### `GET /admin/activities` 🔒 admin
+Recent activity feed, newest first. Filters: `type`, `from`, `to`. Paging: `page`, `limit` (as in other lists).
+
+| `type` | What happened | `actor` is | `recordId` is |
+|---|---|---|---|
+| `user_registered` | A student or faculty member signed up | that user | the user |
+| `vehicle_registered` | A vehicle was added | the owner | the vehicle |
+| `sticker_submitted` | A sticker application was sent | the applicant | the application |
+| `sticker_approved` | An admin approved an application | the admin | the application |
+| `sticker_rejected` | An admin rejected an application | the admin | the application |
+
+```
+GET /admin/activities?type=sticker_approved&from=2026-11-01&page=1&limit=10
+```
+→ `200`
+```json
+{
+  "activities": [
+    {
+      "id": "sticker_approved:7c1e…", "type": "sticker_approved", "occurredAt": "2026-11-24T02:10:00.000Z",
+      "recordId": "7c1e…",
+      "actor": { "id": "…", "fullName": "Admin User", "role": "admin" },
+      "applicant": { "id": "…", "fullName": "Ana Reyes" },
+      "plateNumber": "ANA 001", "stickerNumber": "2026-0001"
+    }
+  ],
+  "pagination": { "page": 1, "limit": 10, "total": 1, "totalPages": 1 }
+}
+```
+- `applicant` is only filled for `sticker_approved` / `sticker_rejected`; otherwise `null`.
+  `plateNumber` is `null` for `user_registered`; `stickerNumber` is only set when approved.
+- Use `id` as the list key. Show names and plates as **text** (`textContent`), never as HTML.
+- The feed is built from each record's own dates, so profile edits and vehicle edits are not listed.
 
 ---
 

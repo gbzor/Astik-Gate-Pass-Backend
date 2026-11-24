@@ -164,7 +164,9 @@ export async function listOwnApplications(applicantId, { status }) {
 }
 
 // GET /api/sticker-applications (admin): search, filter, sort and page through every application.
-export async function listApplications({ status, applicantRole, applicantId, vehicleId, q, sort, order, page, limit }) {
+export async function listApplications({
+  status, applicantRole, applicantId, vehicleId, q, from, to, sort, order, page, limit,
+}) {
   const params = [];
   const where = [];
   const add = (value) => {
@@ -176,6 +178,8 @@ export async function listApplications({ status, applicantRole, applicantId, veh
   if (applicantRole) where.push(`a.role = ${add(applicantRole)}`);
   if (applicantId) where.push(`s.applicant_id = ${add(applicantId)}`);
   if (vehicleId) where.push(`s.vehicle_id = ${add(vehicleId)}`);
+  if (from) where.push(`s.created_at >= ${add(from)}`);
+  if (to) where.push(`s.created_at <= ${add(to)}`);
   if (q) {
     const p = add(likePattern(q));
     where.push(`(v.plate_number ILIKE ${p} OR s.sticker_number ILIKE ${p}

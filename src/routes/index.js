@@ -14,6 +14,7 @@ import authRoutes from './auth.routes.js';
 import usersRoutes from './users.routes.js';
 import vehiclesRoutes from './vehicles.routes.js';
 import stickersRoutes from './stickers.routes.js';
+import adminRoutes from './admin.routes.js';
 import { health } from '../controllers/health.controller.js';
 
 const router = Router();
@@ -23,5 +24,6 @@ router.use('/auth', authRoutes);
 router.use('/users', usersRoutes);
 router.use('/vehicles', vehiclesRoutes);
 router.use('/sticker-applications', stickersRoutes);
+router.use('/admin', adminRoutes);
 
 export default router;
