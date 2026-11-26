@@ -186,3 +186,66 @@ export async function notifyStickerRejected(application) {
     console.error('[notify] Failed to send sticker rejected notification:', err.message);
   }
 }
+
+
+// Notifies applicant when their sticker is approaching expiration (e.g. 3 months or 1 month remaining).
+export async function notifyStickerExpiring(application, monthsRemaining) {
+  try {
+    if (!application?.applicantId) return;
+    const applicant = await users.findById(application.applicantId);
+    if (!applicant?.email) return;
+
+    const firstName = applicant.firstName || 'Applicant';
+    const safeName = escapeHtml(firstName);
+    const plate = application.vehicle?.plateNumber || 'N/A';
+    const safePlate = escapeHtml(plate);
+    const stickerNum = application.stickerNumber || 'N/A';
+    const safeStickerNum = escapeHtml(stickerNum);
+    const manilaExpiry = formatManilaDate(application.expiresAt);
+    const safeExpiry = escapeHtml(manilaExpiry);
+
+    const isUrgent = monthsRemaining === 1;
+    const timeLabel = isUrgent ? '1 month' : `${monthsRemaining} months`;
+    const urgencyPrefix = isUrgent ? 'URGENT: ' : '';
+
+    const subject = `Astik Gate Pass: ${urgencyPrefix}Parking Sticker Renewal Reminder (${timeLabel} remaining)`;
+    const text = isUrgent
+      ? `Hi ${firstName},\n\nURGENT REMINDER: Your campus parking sticker for vehicle ${plate} (Sticker #${stickerNum}) will expire in 1 month on ${manilaExpiry} (Asia/Manila time).\n\nPlease submit your renewal application immediately through the Astik Gate Pass portal to avoid interruption of campus parking privileges.\n\n- Ateneo de Naga University Security Office`
+      : `Hi ${firstName},\n\nThis is a friendly reminder that your campus parking sticker for vehicle ${plate} (Sticker #${stickerNum}) will expire in 3 months on ${manilaExpiry} (Asia/Manila time).\n\nYou may begin preparing your renewal requirements (valid Ateneo ID and updated OR/CR) and reapply on the portal before the expiration date.\n\n- Ateneo de Naga University Security Office`;
+
+    const accentColor = isUrgent ? '#dc2626' : '#d97706';
+    const boxBg = isUrgent ? '#fef2f2' : '#fffbeb';
+    const boxBorder = isUrgent ? '#fecaca' : '#fde68a';
+    const titleText = isUrgent ? 'Urgent Renewal Notice' : 'Sticker Renewal Reminder';
+
+    const html = emailLayout(
+      titleText,
+      `<h2 style="color: ${accentColor}; margin-top: 0;">${titleText}</h2>
+      <p>Hi ${safeName},</p>
+      <p>Your campus parking sticker will expire in <strong>${timeLabel}</strong>.</p>
+      <div style="background-color: ${boxBg}; border: 1px solid ${boxBorder}; border-radius: 6px; padding: 14px; margin: 20px 0;">
+        <p style="margin: 0; font-size: 14px; color: ${accentColor};"><strong>Vehicle Plate:</strong> ${safePlate}</p>
+        <p style="margin: 4px 0 0 0; font-size: 14px; color: ${accentColor};"><strong>Sticker Number:</strong> ${safeStickerNum}</p>
+        <p style="margin: 4px 0 0 0; font-size: 14px; color: ${accentColor};"><strong>Expiration Date:</strong> ${safeExpiry}</p>
+      </div>
+      <h3 style="color: #002147; font-size: 15px; margin-bottom: 8px;">Renewal Instructions:</h3>
+      <p style="margin: 0; font-size: 14px;">${
+        isUrgent
+          ? 'Please log in to the <strong>Astik Gate Pass</strong> portal now to submit your renewal application. Unrenewed stickers will be subject to parking restrictions upon expiration.'
+          : 'Please prepare your vehicle registration (OR/CR) and submit your renewal application on the <strong>Astik Gate Pass</strong> portal before your sticker expires.'
+      }</p>`
+    );
+
+    await sendEmail({ to: applicant.email, subject, text, html });
+
+    if (applicant.contactNumber) {
+      const plateTag = plate !== 'N/A' ? ` (${plate})` : '';
+      const message = isUrgent
+        ? `Astik Pass: URGENT: Sticker${plateTag} expires in 1 mo on ${manilaExpiry}. Renew now on portal to maintain campus access.`
+        : `Astik Pass: Sticker${plateTag} expires in 3 mos on ${manilaExpiry}. Please prepare renewal requirements on the portal.`;
+      await sendSms({ to: applicant.contactNumber, message });
+    }
+  } catch (err) {
+    console.error('[notify] Failed to send sticker expiring notification:', err.message);
+  }
+}

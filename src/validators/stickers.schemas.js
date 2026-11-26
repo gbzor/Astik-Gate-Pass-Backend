@@ -44,9 +44,10 @@ const expiresAt = z.union([
   );
 
 // PATCH /api/sticker-applications/:id/approve (admin)
+// If expiresAt is omitted, it defaults to exactly 2 years upon approval in stickers.service.js.
 export const approveApplicationSchema = z.object({
   stickerNumber,
-  expiresAt,
+  expiresAt: expiresAt.optional(),
 });
 
 // PATCH /api/sticker-applications/:id/reject (admin). The reason is shown to the applicant.
@@ -56,6 +57,11 @@ export const rejectApplicationSchema = z.object({
     .min(REJECTION_REASON_MIN_LENGTH, `Tell the applicant why (at least ${REJECTION_REASON_MIN_LENGTH} characters).`)
     .max(REJECTION_REASON_MAX_LENGTH, `Use ${REJECTION_REASON_MAX_LENGTH} characters or fewer.`)
     .refine((v) => !/\p{Cc}/u.test(v.replace(/\r?\n/g, '')), 'Remove special or invisible characters.'),
+});
+
+// POST /api/sticker-applications/reminders (admin)
+export const triggerRemindersSchema = z.object({
+  targetMonths: z.number().int().positive().optional(),
 });
 
 // GET /api/sticker-applications/mine?status=pending

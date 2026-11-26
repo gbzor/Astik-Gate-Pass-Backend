@@ -13,13 +13,20 @@
 // Ownership rule: students and faculty only see their OWN applications. Someone else's
 // application answers "not found" (404), so nobody can probe which IDs exist.
 import {
-  PAGE_SIZE_MAX, PG_ERROR, ROLE, STICKER_SORT_FIELDS, STICKER_STATUS,
+  DAY_MS,
+  PAGE_SIZE_MAX,
+  PG_ERROR,
+  ROLE,
+  STICKER_SORT_FIELDS,
+  STICKER_STATUS,
+  STICKER_VALIDITY_YEARS,
 } from '../config/constants.js';
 import { pool } from '../db/index.js';
 import { HttpError } from '../utils/httpError.js';
 import { likePattern, sortColumns } from '../utils/sql.js';
 import {
   notifyStickerApproved,
+  notifyStickerExpiring,
   notifyStickerRejected,
   notifyStickerSubmitted,
 } from './notify.service.js';
@@ -63,6 +70,33 @@ const SORTABLE = sortColumns(STICKER_SORT_FIELDS, {
 
 const isAdmin = (user) => user.role === ROLE.ADMIN;
 const iso = (date) => (date ? date.toISOString() : null);
+
+// Calculates sticker expiry exactly 2 years from approval date.
+export function calculateTwoYearExpiry(fromDate = new Date()) {
+  const expiry = new Date(fromDate);
+  expiry.setFullYear(expiry.getFullYear() + STICKER_VALIDITY_YEARS);
+  return expiry;
+}
+
+// Determines the renewal reminder tier (3 months or 1 month) based on the remaining days until expiry.
+// Returns 3 for ~3 months (85-95 days), 1 for ~1 month (25-35 days), or null if outside reminder windows.
+export function getRenewalReminderTier(expiresAt, now = new Date()) {
+  if (!expiresAt) return null;
+  const expiry = new Date(expiresAt);
+  if (Number.isNaN(expiry.getTime())) return null;
+  const nowDate = new Date(now);
+  const diffMs = expiry.getTime() - nowDate.getTime();
+  if (diffMs <= 0) return null; // already expired
+  const days = Math.round(diffMs / DAY_MS);
+
+  if (days >= 25 && days <= 35) {
+    return 1;
+  }
+  if (days >= 85 && days <= 95) {
+    return 3;
+  }
+  return null;
+}
 
 // Database row (snake_case) -> app object (camelCase). Applicant and reviewer details are
 // only added for admins: applicants already know who they are, and reviewers stay private.
@@ -249,10 +283,12 @@ async function review(admin, id, { setSql, params, requireActiveVehicle }) {
 
 // PATCH /api/sticker-applications/:id/approve (admin): issues the sticker.
 // The database requires a sticker number and an expiry date on every approved sticker.
-export async function approveApplication(admin, id, { stickerNumber, expiresAt }) {
+// If expiresAt is not provided, defaults to exactly 2 years upon approval.
+export async function approveApplication(admin, id, { stickerNumber, expiresAt } = {}) {
+  const finalExpiry = expiresAt ? new Date(expiresAt) : calculateTwoYearExpiry();
   const application = await review(admin, id, {
     setSql: 'status = $4, sticker_number = $5, expires_at = $6, rejection_reason = NULL',
-    params: [STICKER_STATUS.APPROVED, stickerNumber, expiresAt],
+    params: [STICKER_STATUS.APPROVED, stickerNumber, finalExpiry],
     requireActiveVehicle: true,
   });
   notifyStickerApproved(application).catch(() => {});
@@ -268,4 +304,40 @@ export async function rejectApplication(admin, id, { reason }) {
   });
   notifyStickerRejected(application).catch(() => {});
   return application;
+}
+
+// Finds approved stickers expiring in the reminder windows (default 3 months and 1 month),
+// and dispatches renewal reminder notifications to the vehicle owners.
+export async function sendExpirationReminders({ now = new Date(), targetMonths } = {}) {
+  const targetDate = new Date(now);
+  const { rows } = await pool.query(
+    `${SELECT_APPLICATION} WHERE s.status = $1 AND s.expires_at > $2 ORDER BY s.expires_at ASC`,
+    [STICKER_STATUS.APPROVED, targetDate],
+  );
+
+  const sent = [];
+  for (const row of rows) {
+    const tier = getRenewalReminderTier(row.expires_at, targetDate);
+    if (!tier) continue;
+    if (targetMonths && tier !== targetMonths) continue;
+
+    const application = toApplication(row);
+    try {
+      await notifyStickerExpiring(application, tier);
+      sent.push({
+        id: application.id,
+        stickerNumber: application.stickerNumber,
+        applicantId: application.applicantId,
+        monthsRemaining: tier,
+      });
+    } catch (err) {
+      console.error(`[stickers] Failed to send renewal reminder for application ${application.id}:`, err.message);
+    }
+  }
+
+  return {
+    processed: rows.length,
+    sentCount: sent.length,
+    sent,
+  };
 }
