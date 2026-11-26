@@ -1,10 +1,13 @@
 // Notification events for campus sticker applications.
-// Formats branded email & SMS messages and dispatches them via email.service and sms.service.
+// Formats branded email & SMS messages and dispatches them via the centralized notifications service.
 // Never throws errors or interrupts HTTP requests.
-import { SMS_MAX_LENGTH } from '../config/constants.js';
+import {
+  ACTIVITY_TYPE,
+  SMS_MAX_LENGTH,
+  STICKER_STATUS,
+} from '../config/constants.js';
 import { users } from '../db/index.js';
-import { sendEmail } from './email.service.js';
-import { sendSms } from './sms.service.js';
+import { dispatchEmail, dispatchSms } from './notifications.service.js';
 
 // Escapes special characters to prevent HTML injection in email templates.
 export function escapeHtml(str) {
@@ -48,7 +51,7 @@ function emailLayout(title, contentHtml) {
     <div style="padding: 28px 24px;">
       ${contentHtml}
     </div>
-    <div style="background-color: #f8fafc; padding: 16px 24px; text-align: center; font-size: 12px; color: #718096; border-top: 1px solid #e2e8f0;">
+    <div style="background-color: #f8fafc; border-top: 1px solid #e2e8f0; padding: 16px 24px; font-size: 12px; color: #718096; text-align: center;">
       <p style="margin: 0 0 4px 0;">Ateneo de Naga University &bull; Security &amp; Safety Office</p>
       <p style="margin: 0;">This is an automated notification. Replies to this address are not monitored.</p>
     </div>
@@ -76,7 +79,7 @@ export async function notifyStickerSubmitted(application) {
       'Application Received',
       `<h2 style="color: #002147; margin-top: 0;">Application Received</h2>
       <p>Hi ${safeName},</p>
-      <p>Your campus sticker application has been submitted and is currently <strong>pending review</strong>.</p>
+      <p>Your campus parking sticker application has been received and is currently under review.</p>
       <div style="background-color: #f7fafc; border-left: 4px solid #002147; padding: 12px 16px; margin: 20px 0;">
         <p style="margin: 0; font-size: 14px;"><strong>Vehicle Plate:</strong> ${safePlate}</p>
         <p style="margin: 4px 0 0 0; font-size: 14px;"><strong>Status:</strong> Pending Review</p>
@@ -84,12 +87,25 @@ export async function notifyStickerSubmitted(application) {
       <p style="font-size: 14px;">The Security &amp; Safety Office will review your application and vehicle details. You will be notified once reviewed.</p>`
     );
 
-    await sendEmail({ to: applicant.email, subject, text, html });
+    const appId = application.id || 'unknown';
+    await dispatchEmail({
+      to: applicant.email,
+      subject,
+      text,
+      html,
+      deduplicationKey: `sticker-submitted:${appId}:email`,
+      metadata: { applicationId: appId, event: ACTIVITY_TYPE.STICKER_SUBMITTED },
+    });
 
     if (applicant.contactNumber) {
       const plateTag = plate !== 'N/A' ? ` (${plate})` : '';
       const message = `Astik Pass: Sticker app${plateTag} submitted and is pending review. Check your university email for details.`;
-      await sendSms({ to: applicant.contactNumber, message });
+      await dispatchSms({
+        to: applicant.contactNumber,
+        message,
+        deduplicationKey: `sticker-submitted:${appId}:sms`,
+        metadata: { applicationId: appId, event: ACTIVITY_TYPE.STICKER_SUBMITTED },
+      });
     }
   } catch (err) {
     console.error('[notify] Failed to send sticker submitted notification:', err.message);
@@ -129,12 +145,25 @@ export async function notifyStickerApproved(application) {
       <p style="margin: 0; font-size: 14px;">Please claim your parking sticker at the <strong>Security &amp; Safety Office</strong>. Present your valid Ateneo ID and vehicle registration documents (OR/CR).</p>`
     );
 
-    await sendEmail({ to: applicant.email, subject, text, html });
+    const appId = application.id || STICKER_STATUS.APPROVED;
+    await dispatchEmail({
+      to: applicant.email,
+      subject,
+      text,
+      html,
+      deduplicationKey: `sticker-approved:${appId}:email`,
+      metadata: { applicationId: appId, event: ACTIVITY_TYPE.STICKER_APPROVED },
+    });
 
     if (applicant.contactNumber) {
       const plateTag = plate !== 'N/A' ? ` (${plate})` : '';
       const message = `Astik Pass: Sticker app${plateTag} is APPROVED! Sticker #${stickerNum}, valid until ${manilaExpiry}. Claim at Security Office.`;
-      await sendSms({ to: applicant.contactNumber, message });
+      await dispatchSms({
+        to: applicant.contactNumber,
+        message,
+        deduplicationKey: `sticker-approved:${appId}:sms`,
+        metadata: { applicationId: appId, event: ACTIVITY_TYPE.STICKER_APPROVED },
+      });
     }
   } catch (err) {
     console.error('[notify] Failed to send sticker approved notification:', err.message);
@@ -170,23 +199,34 @@ export async function notifyStickerRejected(application) {
       <p style="font-size: 14px;">You may submit a new application with corrected documents or visit the Security &amp; Safety Office for inquiries.</p>`
     );
 
-    await sendEmail({ to: applicant.email, subject, text, html });
+    const appId = application.id || STICKER_STATUS.REJECTED;
+    await dispatchEmail({
+      to: applicant.email,
+      subject,
+      text,
+      html,
+      deduplicationKey: `sticker-rejected:${appId}:email`,
+      metadata: { applicationId: appId, event: ACTIVITY_TYPE.STICKER_REJECTED },
+    });
 
     if (applicant.contactNumber) {
       const plateTag = plate !== 'N/A' ? ` (${plate})` : '';
-      // Truncate rejection reason so total SMS stays strictly under SMS_MAX_LENGTH (160)
       const maxReasonChars = 45;
       const shortReason = reason.length > maxReasonChars
         ? `${reason.slice(0, maxReasonChars - 3)}...`
         : reason;
       const message = `Astik Pass: Sticker app${plateTag} not approved. Reason: ${shortReason}. Check your AdNU email.`;
-      await sendSms({ to: applicant.contactNumber, message });
+      await dispatchSms({
+        to: applicant.contactNumber,
+        message,
+        deduplicationKey: `sticker-rejected:${appId}:sms`,
+        metadata: { applicationId: appId, event: ACTIVITY_TYPE.STICKER_REJECTED },
+      });
     }
   } catch (err) {
     console.error('[notify] Failed to send sticker rejected notification:', err.message);
   }
 }
-
 
 // Notifies applicant when their sticker is approaching expiration (e.g. 3 months or 1 month remaining).
 export async function notifyStickerExpiring(application, monthsRemaining) {
@@ -236,14 +276,27 @@ export async function notifyStickerExpiring(application, monthsRemaining) {
       }</p>`
     );
 
-    await sendEmail({ to: applicant.email, subject, text, html });
+    const appId = application.id || 'expiring';
+    await dispatchEmail({
+      to: applicant.email,
+      subject,
+      text,
+      html,
+      deduplicationKey: `sticker-expiring:${appId}:${monthsRemaining}:email`,
+      metadata: { applicationId: appId, event: 'sticker_expiring', monthsRemaining },
+    });
 
     if (applicant.contactNumber) {
       const plateTag = plate !== 'N/A' ? ` (${plate})` : '';
       const message = isUrgent
         ? `Astik Pass: URGENT: Sticker${plateTag} expires in 1 mo on ${manilaExpiry}. Renew now on portal to maintain campus access.`
         : `Astik Pass: Sticker${plateTag} expires in 3 mos on ${manilaExpiry}. Please prepare renewal requirements on the portal.`;
-      await sendSms({ to: applicant.contactNumber, message });
+      await dispatchSms({
+        to: applicant.contactNumber,
+        message,
+        deduplicationKey: `sticker-expiring:${appId}:${monthsRemaining}:sms`,
+        metadata: { applicationId: appId, event: 'sticker_expiring', monthsRemaining },
+      });
     }
   } catch (err) {
     console.error('[notify] Failed to send sticker expiring notification:', err.message);

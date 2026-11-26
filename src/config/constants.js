@@ -202,3 +202,30 @@ export const PH_MOBILE_PATTERN = /^\+639\d{9}$/;
 
 // Renewal notification intervals: reminders sent at 3 months and 1 month before expiry.
 export const STICKER_RENEWAL_REMINDER_MONTHS = Object.freeze([3, 1]);
+
+
+// ─── Notification Management ────────────────────────────────────────────────
+
+// Notification delivery statuses.
+export const NOTIFICATION_STATUS = Object.freeze({
+  PENDING: 'pending',
+  SENT: 'sent',
+  FAILED: 'failed',
+});
+export const NOTIFICATION_STATUSES = Object.freeze(Object.values(NOTIFICATION_STATUS));
+
+// Notification channels.
+export const NOTIFICATION_CHANNEL = Object.freeze({
+  EMAIL: 'email',
+  SMS: 'sms',
+});
+export const NOTIFICATION_CHANNELS = Object.freeze(Object.values(NOTIFICATION_CHANNEL));
+
+// Max delivery retry attempts for transient delivery failures.
+export const NOTIFICATION_MAX_RETRIES = 3;
+
+// Delay between retry attempts (milliseconds).
+export const NOTIFICATION_RETRY_DELAY_MS = 500;
+
+// Window within which identical notifications are suppressed as duplicates (5 minutes).
+export const NOTIFICATION_DEDUP_WINDOW_MS = 5 * 60 * 1000;
