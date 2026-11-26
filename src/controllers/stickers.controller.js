@@ -38,3 +38,9 @@ export async function reject(req, res) {
   const application = await stickersService.rejectApplication(req.user, req.params.id, req.body);
   res.json({ application });
 }
+
+// POST /api/sticker-applications/reminders (admin)
+export async function triggerReminders(req, res) {
+  const result = await stickersService.sendExpirationReminders(req.body);
+  res.json({ result });
+}
