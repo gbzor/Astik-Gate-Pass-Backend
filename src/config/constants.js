@@ -181,3 +181,20 @@ export const DB_POOL_MAX_CONNECTIONS = 10;
 // What an ID must look like before it is sent to a uuid column. Anything else can't match a row,
 // and Postgres would answer with an error instead of "not found".
 export const UUID_PATTERN = /^[0-9a-f-]{36}$/i;
+
+
+// ─── Notifications ──────────────────────────────────────────────────────────
+
+// SMS providers supported by the notification service.
+export const SMS_PROVIDER = Object.freeze({
+  CONSOLE: 'console',
+  TWILIO: 'twilio',
+  ANDROID_GATEWAY: 'android-gateway',
+});
+export const SMS_PROVIDERS = Object.freeze(Object.values(SMS_PROVIDER));
+
+// Standard single-segment GSM text character limit.
+export const SMS_MAX_LENGTH = 160;
+
+// Philippine mobile number format (E.164, schema.sql: VARCHAR(13)).
+export const PH_MOBILE_PATTERN = /^\+639\d{9}$/;
