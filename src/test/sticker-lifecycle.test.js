@@ -21,7 +21,7 @@ process.env.DATABASE_URL = testDb;
 process.env.NODE_ENV = 'test';
 process.env.JWT_SECRET = 'test-secret-that-is-at-least-32-characters-long';
 
-const { pool } = await import('../src/db/index.js');
+const { pool } = await import('../db/index.js');
 
 const ids = {};
 let counter = 0;
@@ -65,7 +65,7 @@ const history = (id) => pool.query(
 ).then((r) => r.rows);
 
 before(async () => {
-  await pool.query(await readFile(new URL('../src/db/schema.sql', import.meta.url), 'utf8'));
+  await pool.query(await readFile(new URL('../db/schema.sql', import.meta.url), 'utf8'));
   await pool.query('TRUNCATE sticker_application_history, sticker_number_counters, parking_records, campus_stickers, parking_areas, vehicles, admin_accounts, users CASCADE');
   ids.admin = await addUser('admin', 'Admin');
   ids.ana = await addUser('student', 'Ana');

@@ -84,6 +84,8 @@ export const STICKER_NUMBER_PATTERN = /^[A-Z0-9-]+$/;
 
 // Longest validity an admin can give a sticker when approving it (about 2 school years).
 export const STICKER_MAX_VALIDITY_DAYS = 730;
+// Default validity duration when a sticker is approved (exactly 2 years upon approval).
+export const STICKER_VALIDITY_YEARS = 2;
 
 // Reason shown to the applicant when an application is rejected.
 export const REJECTION_REASON_MIN_LENGTH = 3;
@@ -214,3 +216,49 @@ export const DB_POOL_MAX_CONNECTIONS = 10;
 // What an ID must look like before it is sent to a uuid column. Anything else can't match a row,
 // and Postgres would answer with an error instead of "not found".
 export const UUID_PATTERN = /^[0-9a-f-]{36}$/i;
+
+// ─── Notifications ──────────────────────────────────────────────────────────
+
+// SMS providers supported by the notification service.
+export const SMS_PROVIDER = Object.freeze({
+  CONSOLE: 'console',
+  TWILIO: 'twilio',
+  ANDROID_GATEWAY: 'android-gateway',
+});
+export const SMS_PROVIDERS = Object.freeze(Object.values(SMS_PROVIDER));
+
+// Standard single-segment GSM text character limit.
+export const SMS_MAX_LENGTH = 160;
+
+// Philippine mobile number format (E.164, schema.sql: VARCHAR(13)).
+export const PH_MOBILE_PATTERN = /^\+639\d{9}$/;
+
+// Renewal notification intervals: reminders sent at 3 months and 1 month before expiry.
+export const STICKER_RENEWAL_REMINDER_MONTHS = Object.freeze([3, 1]);
+
+
+// ─── Notification Management ────────────────────────────────────────────────
+
+// Notification delivery statuses.
+export const NOTIFICATION_STATUS = Object.freeze({
+  PENDING: 'pending',
+  SENT: 'sent',
+  FAILED: 'failed',
+});
+export const NOTIFICATION_STATUSES = Object.freeze(Object.values(NOTIFICATION_STATUS));
+
+// Notification channels.
+export const NOTIFICATION_CHANNEL = Object.freeze({
+  EMAIL: 'email',
+  SMS: 'sms',
+});
+export const NOTIFICATION_CHANNELS = Object.freeze(Object.values(NOTIFICATION_CHANNEL));
+
+// Max delivery retry attempts for transient delivery failures.
+export const NOTIFICATION_MAX_RETRIES = 3;
+
+// Delay between retry attempts (milliseconds).
+export const NOTIFICATION_RETRY_DELAY_MS = 500;
+
+// Window within which identical notifications are suppressed as duplicates (5 minutes).
+export const NOTIFICATION_DEDUP_WINDOW_MS = 5 * 60 * 1000;

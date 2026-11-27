@@ -13,6 +13,7 @@ import {
   listMyApplicationsQuery,
   rejectApplicationSchema,
   submitApplicationSchema,
+  triggerRemindersSchema,
 } from '../validators/stickers.schemas.js';
 
 const router = Router();
@@ -20,8 +21,9 @@ const applicants = [requireAuth, requireRole(...MEMBER_ROLES)];
 const admin = [requireAuth, requireRole(ROLE.ADMIN)];
 
 router.post('/', ...applicants, validateBody(submitApplicationSchema), stickersCtrl.submit);
-// "/mine" is declared before "/:id" so it is never read as an ID.
+// "/mine" and "/reminders" are declared before "/:id" so they are never read as an ID.
 router.get('/mine', ...applicants, validateQuery(listMyApplicationsQuery), stickersCtrl.listMine);
+router.post('/reminders', ...admin, validateBody(triggerRemindersSchema), stickersCtrl.triggerReminders);
 
 router.get('/', ...admin, validateQuery(listApplicationsQuery), stickersCtrl.list);
 router.get('/:id', requireAuth, requireRole(...ROLES), validateParams(idParams), stickersCtrl.getOne);
