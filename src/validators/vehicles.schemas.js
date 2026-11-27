@@ -18,7 +18,8 @@ import {
 
 // Plate numbers are stored in one standard form ("abc  1234" becomes "ABC 1234"),
 // so the same plate can't be registered twice with different spacing or case.
-const plateNumber = z.string().trim().toUpperCase()
+// Also used by the parking entry/exit routes to look a vehicle up by its plate.
+export const plateNumber =z.string().trim().toUpperCase()
   .transform((v) => v.replace(/\s+/g, ' '))
   .pipe(z.string()
     .min(PLATE_NUMBER_MIN_LENGTH, 'Enter the plate number.')

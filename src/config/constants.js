@@ -96,6 +96,39 @@ export const CAMPUS_UTC_OFFSET = '+08:00';
 
 export const DAY_MS = 24 * 60 * 60 * 1000;
 
+// ─── Parking ────────────────────────────────────────────────────────────────────
+
+// Who may record a vehicle's entry and exit. Admins only for now; if a guard role is added later,
+// add it here (and ask the database developer to allow it in schema.sql).
+export const PARKING_RECORDER_ROLES = Object.freeze([ROLE.ADMIN]);
+
+// A parking record is "parked" while it has no exit time, and "exited" once it has one.
+// Not stored as a column: worked out from parking_records.exited_at (schema.sql).
+export const PARKING_STATUS = Object.freeze({ PARKED: 'parked', EXITED: 'exited' });
+export const PARKING_STATUSES = Object.freeze(Object.values(PARKING_STATUS));
+
+// Parking area names, e.g. "Main Gate Lot" (schema.sql: VARCHAR(80), unique ignoring case).
+export const PARKING_AREA_NAME_MAX_LENGTH = 80;
+export const PARKING_AREA_NAME_PATTERN = /^[\p{L}\p{N} .,'()&/#-]+$/u;
+
+// Most vehicles one parking area can hold (schema.sql only requires more than 0).
+// Stops typos like 50000 from making an area look endlessly free.
+export const PARKING_AREA_CAPACITY_MAX = 5000;
+
+// Map coordinates (schema.sql: NUMERIC(9,6), so 6 decimal places, about 10 cm).
+export const LATITUDE_MIN = -90;
+export const LATITUDE_MAX = 90;
+export const LONGITUDE_MIN = -180;
+export const LONGITUDE_MAX = 180;
+export const COORDINATE_DECIMALS = 6;
+
+// Fields the parking lists can be sorted by, and their default. Every name must also be in
+// the matching SORTABLE map in services/parking.service.js.
+export const PARKING_RECORD_SORT_FIELDS = Object.freeze(['enteredAt', 'exitedAt', 'plateNumber', 'areaName']);
+export const PARKING_RECORD_SORT_DEFAULT = 'enteredAt';
+export const PARKING_AREA_SORT_FIELDS = Object.freeze(['name', 'capacity', 'createdAt']);
+export const PARKING_AREA_SORT_DEFAULT = 'name';
+
 // ─── Lists, search and sorting ──────────────────────────────────────────────────
 
 // Record lists: default and largest page size (stops one request from dumping every row).

@@ -393,6 +393,118 @@ GET /admin/activities?type=sticker_approved&from=2026-11-01&page=1&limit=10
 
 ---
 
+## Parking
+
+Every parking route needs a signed-in user (`401` otherwise). Admin-only routes answer `403` to
+students and faculty. Someone else's record, vehicle or history answers `404`, so IDs can't be guessed.
+
+### Parking areas
+
+#### `GET /parking/areas` 🔒 any signed-in user
+Parking areas with live availability, for the map and the area picker. Students and faculty only see
+**active** areas; admins see all of them, or filter with `isActive=true|false`.
+Other filters: `q` (area name). Sort: `name` (default, A to Z), `capacity`, `createdAt`. Paging as in other lists.
+→ `200 { "areas": [ ...area ], "pagination": { … } }`
+
+#### `GET /parking/areas/:id` 🔒 any signed-in user
+→ `200 { "area": { ...area } }`. → `404` if it doesn't exist (or, for students and faculty, is deactivated).
+
+#### `POST /parking/areas` 🔒 admin
+```json
+{ "name": "Main Gate Lot", "latitude": 13.6295, "longitude": 123.1945, "capacity": 120 }
+```
+- `name`: up to 80 characters, unique ignoring case (`main gate lot` = `Main Gate Lot`).
+- `latitude` −90 to 90 and `longitude` −180 to 180, as **numbers**, rounded to 6 decimals.
+- `capacity`: whole number, 1 to 5000.
+
+→ `201 { "area": { ...area } }` → `409` if the name is taken.
+
+#### `PATCH /parking/areas/:id` 🔒 admin
+Send only the fields that change (`name`, `latitude`, `longitude`, `capacity`).
+→ `200 { "area": { ...area } }`
+→ `409` if the name is taken, or the new capacity is lower than the vehicles parked there now.
+
+#### `PATCH /parking/areas/:id/deactivate` · `PATCH /parking/areas/:id/activate` 🔒 admin
+No body. A deactivated area is hidden from students and faculty and refuses new entries.
+→ `200 { "area": { ...area } }` → `409` when deactivating an area that still has parked vehicles.
+
+#### The `area` object
+```json
+{
+  "id": "…uuid", "name": "Main Gate Lot", "latitude": 13.6295, "longitude": 123.1945,
+  "capacity": 120, "occupied": 87, "available": 33, "isActive": true,
+  "createdAt": "2026-11-27T…", "updatedAt": "2026-11-27T…"
+}
+```
+> Parking areas don't have a `description` yet: the database has no column for it. It will be added later.
+
+### Entry and exit (gate)
+
+Admins only for now. Identify the vehicle by **either** `vehicleId` **or** `plateNumber` (not both).
+The plate is matched the same way it is stored (`abc  1234` = `ABC 1234`).
+
+#### `POST /parking/entry` 🔒 admin
+```json
+{ "plateNumber": "ABC 1234", "parkingAreaId": "…uuid" }
+```
+→ `201 { "record": { ...record } }` with `status: "parked"` and the sticker that was checked.
+
+| Code | When |
+|---|---|
+| `403` | The vehicle has **no valid campus sticker** (none approved, or it has expired) |
+| `404` | Vehicle or parking area not found |
+| `409` | Already parked; area full; area deactivated; vehicle deactivated; owner's account disabled |
+
+Capacity is enforced even when several cars are recorded at the same moment.
+
+#### `POST /parking/exit` 🔒 admin
+```json
+{ "plateNumber": "ABC 1234" }
+```
+→ `200 { "record": { ...record } }` with `status: "exited"`. → `409` if the vehicle isn't parked. → `404` if not found.
+
+### Records, current vehicles and history
+
+All lists accept `status` (`parked` or `exited`), `parkingAreaId`, `from`, `to`, `sort`
+(`enteredAt` default, `exitedAt`, `plateNumber`, `areaName`), `order`, `page` and `limit`.
+`from`/`to` (campus dates) return visits where the vehicle was **on campus at any time in that range**.
+
+#### `GET /parking/records` 🔒 admin
+Every parking record. Extra filters: `vehicleId`, `userId`, `q` (plate, owner name, ID number or area name).
+```
+GET /parking/records?status=parked&parkingAreaId=…&from=2026-11-01&to=2026-11-30&page=1
+```
+→ `200 { "records": [ ...record ], "pagination": { … } }`
+
+#### `GET /parking/records/:id` 🔒 admin, or the record's owner
+→ `200 { "record": { ...record } }` → `404` if it doesn't exist or belongs to someone else.
+
+#### `GET /parking/current` 🔒 admin
+Vehicles on campus right now. Filters: `parkingAreaId`, `q`. → `200 { "records": [ … ], "pagination": { … } }`
+
+#### `GET /parking/history/me` 🔒 any signed-in user
+Your own parking history. → `200 { "records": [ … ], "pagination": { … } }`
+
+#### `GET /parking/history/vehicle/:id` 🔒 admin, or the vehicle's owner
+#### `GET /parking/history/user/:id` 🔒 admin, or that same user
+→ `200 { "records": [ … ], "pagination": { … } }` → `404` if not found or not yours.
+
+#### The `record` object
+```json
+{
+  "id": "…uuid", "status": "parked", "enteredAt": "2026-11-27T00:15:00.000Z", "exitedAt": null,
+  "durationMinutes": 42,
+  "vehicle": { "id": "…", "plateNumber": "ABC 1234", "type": "car", "make": "Toyota", "model": "Vios", "color": "White" },
+  "owner": { "id": "…", "firstName": "Ana", "lastName": "Reyes", "fullName": "Ana Reyes", "schoolId": "2023-00001", "role": "student" },
+  "parkingArea": { "id": "…", "name": "Main Gate Lot" },
+  "sticker": { "id": "…", "stickerNumber": "2026-0001", "expiresAt": "2027-06-30T15:59:59.999Z" }
+}
+```
+`durationMinutes` counts up to now while still parked. `sticker` is `null` only on old records saved
+without one. The owner's email is never included. Show names and plates as **text**, never as HTML.
+
+---
+
 ## Roles (for future endpoints)
 
 | Role | How it's created | Login page |

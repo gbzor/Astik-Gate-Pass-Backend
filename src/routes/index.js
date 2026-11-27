@@ -15,7 +15,11 @@ import usersRoutes from './users.routes.js';
 import vehiclesRoutes from './vehicles.routes.js';
 import stickersRoutes from './stickers.routes.js';
 import adminRoutes from './admin.routes.js';
+<<<<<<< HEAD
+import parkingRoutes from './parking.routes.js';
+=======
 import notificationsRoutes from './notifications.routes.js';
+>>>>>>> origin/main
 import { health } from '../controllers/health.controller.js';
 
 const router = Router();
@@ -26,6 +30,10 @@ router.use('/users', usersRoutes);
 router.use('/vehicles', vehiclesRoutes);
 router.use('/sticker-applications', stickersRoutes);
 router.use('/admin', adminRoutes);
+<<<<<<< HEAD
+router.use('/parking', parkingRoutes);
+=======
 router.use('/notifications', notificationsRoutes);
+>>>>>>> origin/main
 
 export default router;
